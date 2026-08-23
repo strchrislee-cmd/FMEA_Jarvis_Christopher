@@ -5,6 +5,7 @@
 export type FmeaType = 'DFMEA' | 'PFMEA'
 export type RiskMethod = 'RPN' | 'AP'
 export type ApLevel = 'H' | 'M' | 'L'
+export type FourM = 'Man' | 'Machine' | 'Material' | 'Method'
 
 // ── 2. Structure Analysis: 트리 ───────────────
 // DFMEA: System→Subsystem→Component / PFMEA: Process→Step→WorkElement
@@ -12,7 +13,8 @@ export interface StructureNode {
   id: string
   parentId: string | null // null = 루트
   name: string
-  level: number // 0,1,2 (트리 깊이)
+  level: number // 0,1,2 (3레벨 고정)
+  category?: FourM // PFMEA Work Element(level 2)에서만 사용하는 4M 분류
 }
 
 // ── 3. Function Analysis (→ StructureNode에 연결) ─
@@ -70,17 +72,32 @@ export interface Documentation {
   summary: string
 }
 
-// ── 1. Planning & Preparation: 프로젝트 메타 ──────
+// ── 1. Planning & Preparation ─────────────────
+// 헤더 성격의 메타(제목/유형/방식)와 계획 내용(범위/경계/가정/팀)을 나눈다.
 export interface ProjectMeta {
   title: string
   type: FmeaType
   riskMethod: RiskMethod
 }
 
+export interface TeamMember {
+  id: string
+  name: string
+}
+
+export interface Planning {
+  scope: string // 분석 범위 설명
+  inScope: string // 경계: in-scope
+  outOfScope: string // 경계: out-of-scope
+  assumptions: string // 가정
+  team: TeamMember[] // 팀원 목록
+}
+
 // ── 전역 상태 (FMEA 프로젝트 1건, 순수 도메인 데이터) ─
 // UI 커서(currentStep 등)는 포함하지 않는다 → 내보내는 JSON은 도메인 데이터만.
 export interface FmeaProject {
   meta: ProjectMeta
+  planning: Planning
   structure: StructureNode[]
   functions: FunctionItem[]
   failureModes: FailureMode[]

@@ -4,6 +4,7 @@ import type { FmeaProject } from '../types/fmea'
 export function createEmptyProject(): FmeaProject {
   return {
     meta: { title: '', type: 'DFMEA', riskMethod: 'RPN' },
+    planning: { scope: '', inScope: '', outOfScope: '', assumptions: '', team: [] },
     structure: [],
     functions: [],
     failureModes: [],
