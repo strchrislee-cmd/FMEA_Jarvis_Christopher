@@ -1,10 +1,11 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { InterfaceKind, StructureNode } from '../types/fmea'
 import type { useFmea } from '../state/useFmea'
 import { newId } from '../lib/id'
 import { BLOCK, blockPositions, type Pos } from '../lib/diagram'
 
 type Fmea = ReturnType<typeof useFmea>
+type View = { k: number; tx: number; ty: number }
 
 const KINDS: InterfaceKind[] = ['신호', '전원', '기계']
 const KIND_COLOR: Record<InterfaceKind, string> = {
@@ -12,8 +13,13 @@ const KIND_COLOR: Record<InterfaceKind, string> = {
   전원: '#b45309',
   기계: '#7c3aed',
 }
+const HEIGHTS: [string, number][] = [
+  ['작게', 420],
+  ['보통', 520],
+  ['크게', 720],
+]
+const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v))
 
-// 블록 테두리에서 대상 방향으로의 접점
 function border(cx: number, cy: number, w: number, h: number, tx: number, ty: number): Pos {
   const dx = tx - cx
   const dy = ty - cy
@@ -24,14 +30,21 @@ function border(cx: number, cy: number, w: number, h: number, tx: number, ty: nu
   return { x: cx + dx * s, y: cy + dy * s }
 }
 
-// Step 2 다이어그램 편집기 — 블록 드래그(layout 갱신) + 인터페이스 생성/편집. 순수 SVG.
+// Step 2 다이어그램 편집기 — 블록 드래그/연결 + 캔버스 높이 조절 + 줌/팬. 순수 SVG.
+// 줌·팬은 content <g> transform으로 처리하고, 화면→content 좌표 변환은 그 g의
+// getScreenCTM().inverse()로 일원화한다(어떤 배율에서도 드래그/드롭이 정확).
+// 줌·팬·높이는 세션 UI 상태로만 두고 저장하지 않는다(layout만 저장).
 export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
   const { project } = fmea
   const svgRef = useRef<SVGSVGElement>(null)
+  const gRef = useRef<SVGGElement>(null)
   const [drag, setDrag] = useState<{ id: string; dx: number; dy: number; x: number; y: number } | null>(null)
   const [connect, setConnect] = useState<{ fromId: string; x: number; y: number } | null>(null)
+  const [pan, setPan] = useState<{ x0: number; y0: number; tx0: number; ty0: number } | null>(null)
   const [selIface, setSelIface] = useState<string | null>(null)
   const [selBlock, setSelBlock] = useState<string | null>(null)
+  const [view, setView] = useState<View>({ k: 1, tx: 0, ty: 0 })
+  const [canvasH, setCanvasH] = useState(520)
 
   const blocks = project.structure.filter((n) => n.level === 1)
   const roots = project.structure.filter((n) => n.level === 0)
@@ -43,6 +56,73 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
     return { x: p.x + BLOCK.w / 2, y: p.y + BLOCK.h / 2 }
   }
 
+  // 화면(client) → content 좌표. 줌/팬/리사이즈/오프셋을 한 번에 반영.
+  const toContent = (e: { clientX: number; clientY: number }): Pos => {
+    const svg = svgRef.current
+    const g = gRef.current
+    if (!svg || !g) return { x: 0, y: 0 }
+    const pt = svg.createSVGPoint()
+    pt.x = e.clientX
+    pt.y = e.clientY
+    const m = g.getScreenCTM()
+    if (!m) return { x: 0, y: 0 }
+    const p = pt.matrixTransform(m.inverse())
+    return { x: p.x, y: p.y }
+  }
+
+  // 마우스 휠 줌(커서 기준). React onWheel은 passive일 수 있어 native 리스너로.
+  useEffect(() => {
+    const svg = svgRef.current
+    if (!svg) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const rect = svg.getBoundingClientRect()
+      const mx = e.clientX - rect.left
+      const my = e.clientY - rect.top
+      const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1
+      setView((v) => {
+        const k2 = clamp(v.k * factor, 0.3, 3)
+        const cx = (mx - v.tx) / v.k
+        const cy = (my - v.ty) / v.k
+        return { k: k2, tx: mx - cx * k2, ty: my - cy * k2 }
+      })
+    }
+    svg.addEventListener('wheel', onWheel, { passive: false })
+    return () => svg.removeEventListener('wheel', onWheel)
+  }, [])
+
+  function zoomBy(factor: number) {
+    const svg = svgRef.current
+    if (!svg) return
+    const rect = svg.getBoundingClientRect()
+    const mx = rect.width / 2
+    const my = rect.height / 2
+    setView((v) => {
+      const k2 = clamp(v.k * factor, 0.3, 3)
+      const cx = (mx - v.tx) / v.k
+      const cy = (my - v.ty) / v.k
+      return { k: k2, tx: mx - cx * k2, ty: my - cy * k2 }
+    })
+  }
+
+  function fit() {
+    const svg = svgRef.current
+    const g = gRef.current
+    if (!svg || !g) return
+    const bb = g.getBBox()
+    if (bb.width === 0 || bb.height === 0) return
+    const rect = svg.getBoundingClientRect()
+    const pad = 32
+    const k = clamp(
+      Math.min((rect.width - pad) / bb.width, (rect.height - pad) / bb.height),
+      0.3,
+      3,
+    )
+    const tx = (rect.width - bb.width * k) / 2 - bb.x * k
+    const ty = (rect.height - bb.height * k) / 2 - bb.y * k
+    setView({ k, tx, ty })
+  }
+
   if (blocks.length === 0) {
     return (
       <p className="text-sm text-gray-400">
@@ -51,17 +131,6 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
       </p>
     )
   }
-
-  // 캔버스 크기 = 블록 범위 + 여백
-  let maxX = 0
-  let maxY = 0
-  for (const b of blocks) {
-    const p = posOf(b.id)
-    maxX = Math.max(maxX, p.x + BLOCK.w)
-    maxY = Math.max(maxY, p.y + BLOCK.h)
-  }
-  const W = Math.max(760, maxX + BLOCK.margin)
-  const H = Math.max(360, maxY + BLOCK.margin)
 
   // System 경계 프레임 = 블록 바운딩 박스 + 여백
   let fx1 = Infinity, fy1 = Infinity, fx2 = -Infinity, fy2 = -Infinity
@@ -74,22 +143,10 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
   const frame = { x: fx1 - pad, y: fy1 - pad, w: fx2 - fx1 + pad * 2, h: fy2 - fy1 + pad * 2 }
   const systemLabel = roots.map((r) => r.name || '(이름 없음)').join(' · ') || 'System 경계'
 
-  const toSvg = (e: React.PointerEvent): Pos => {
-    const svg = svgRef.current
-    if (!svg) return { x: 0, y: 0 }
-    const pt = svg.createSVGPoint()
-    pt.x = e.clientX
-    pt.y = e.clientY
-    const m = svg.getScreenCTM()
-    if (!m) return { x: 0, y: 0 }
-    const p = pt.matrixTransform(m.inverse())
-    return { x: p.x, y: p.y }
-  }
-
   function startDrag(e: React.PointerEvent, node: StructureNode) {
     e.stopPropagation()
     svgRef.current?.setPointerCapture(e.pointerId)
-    const p = toSvg(e)
+    const p = toContent(e)
     const b = posOf(node.id)
     setSelBlock(node.id)
     setSelIface(null)
@@ -99,17 +156,27 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
   function startConnect(e: React.PointerEvent, node: StructureNode) {
     e.stopPropagation()
     svgRef.current?.setPointerCapture(e.pointerId)
-    const p = toSvg(e)
+    const p = toContent(e)
     setConnect({ fromId: node.id, x: p.x, y: p.y })
+  }
+
+  function onBgDown(e: React.PointerEvent) {
+    // 빈 캔버스 드래그 → 팬 (+ 선택 해제)
+    svgRef.current?.setPointerCapture(e.pointerId)
+    setSelBlock(null)
+    setSelIface(null)
+    setPan({ x0: e.clientX, y0: e.clientY, tx0: view.tx, ty0: view.ty })
   }
 
   function onMove(e: React.PointerEvent) {
     if (drag) {
-      const p = toSvg(e)
+      const p = toContent(e)
       setDrag((d) => (d ? { ...d, x: Math.round(p.x - d.dx), y: Math.round(p.y - d.dy) } : d))
     } else if (connect) {
-      const p = toSvg(e)
+      const p = toContent(e)
       setConnect((c) => (c ? { ...c, x: p.x, y: p.y } : c))
+    } else if (pan) {
+      setView((v) => ({ ...v, tx: pan.tx0 + (e.clientX - pan.x0), ty: pan.ty0 + (e.clientY - pan.y0) }))
     }
   }
 
@@ -119,25 +186,19 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
       setDrag(null)
     }
     if (connect) {
-      // 포인터 캡처로 up이 svg에 오므로, 드롭 지점을 직접 히트테스트한다.
-      const p = toSvg(e)
+      const p = toContent(e)
       const target = blocks.find((n) => {
         const bp = posOf(n.id)
         return p.x >= bp.x && p.x <= bp.x + BLOCK.w && p.y >= bp.y && p.y <= bp.y + BLOCK.h
       })
       if (target && target.id !== connect.fromId) {
         const id = newId()
-        fmea.addInterface({
-          id,
-          fromNodeId: connect.fromId,
-          toNodeId: target.id,
-          label: '',
-          kind: '신호',
-        })
+        fmea.addInterface({ id, fromNodeId: connect.fromId, toNodeId: target.id, label: '', kind: '신호' })
         setSelIface(id)
       }
       setConnect(null)
     }
+    if (pan) setPan(null)
   }
 
   const iface = project.interfaces.find((i) => i.id === selIface) ?? null
@@ -145,217 +206,123 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
 
   return (
     <div className="max-w-full">
-      <div className="mb-2 flex items-center justify-between">
-        <p className="text-xs text-gray-400">
-          블록 드래그로 이동 · 가장자리 핸들에서 끌어 연결 · 연결선 클릭으로 편집
-        </p>
-        <button
-          type="button"
-          onClick={exportPng}
-          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
-        >
-          PNG 내보내기
-        </button>
+      {/* 툴바 */}
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <div className="inline-flex overflow-hidden rounded-md border border-gray-300">
+          <button type="button" onClick={() => zoomBy(1 / 1.2)} className="px-2.5 py-1 text-sm text-gray-700 hover:bg-gray-100" aria-label="축소">−</button>
+          <span className="border-x border-gray-300 px-2 py-1 text-xs tabular-nums text-gray-600">{Math.round(view.k * 100)}%</span>
+          <button type="button" onClick={() => zoomBy(1.2)} className="px-2.5 py-1 text-sm text-gray-700 hover:bg-gray-100" aria-label="확대">+</button>
+        </div>
+        <button type="button" onClick={fit} className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100">화면에 맞춤</button>
+        <button type="button" onClick={() => setView({ k: 1, tx: 0, ty: 0 })} className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100">100%</button>
+
+        <span className="mx-1 h-4 w-px bg-gray-300" />
+        <span className="text-xs text-gray-400">캔버스</span>
+        <div className="inline-flex overflow-hidden rounded-md border border-gray-300">
+          {HEIGHTS.map(([label, h]) => (
+            <button
+              key={h}
+              type="button"
+              onClick={() => setCanvasH(h)}
+              className={`px-2.5 py-1 text-xs font-medium ${canvasH === h ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <span className="ml-auto text-xs text-gray-400">휠 줌 · 빈 곳 드래그로 팬</span>
+        <button type="button" onClick={exportPng} className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100">PNG 내보내기</button>
       </div>
 
-      <div
-        className="relative overflow-auto rounded-lg border border-gray-200 bg-white"
-        style={{ maxHeight: 560 }}
-      >
+      <div className="relative overflow-hidden rounded-lg border border-gray-200 bg-white" style={{ height: canvasH }}>
         <svg
           ref={svgRef}
-          width={W}
-          height={H}
-          viewBox={`0 0 ${W} ${H}`}
-          style={{ display: 'block', touchAction: 'none' }}
+          width="100%"
+          height="100%"
+          style={{ display: 'block', touchAction: 'none', cursor: pan ? 'grabbing' : 'grab' }}
+          onPointerDown={onBgDown}
           onPointerMove={onMove}
           onPointerUp={onUp}
-          onPointerDown={() => {
-            setSelBlock(null)
-            setSelIface(null)
-          }}
         >
           <defs>
             {KINDS.map((k) => (
-              <marker
-                key={k}
-                id={`arr-${k}`}
-                viewBox="0 0 10 10"
-                refX="9"
-                refY="5"
-                markerWidth="7"
-                markerHeight="7"
-                orient="auto-start-reverse"
-              >
+              <marker key={k} id={`arr-${k}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
                 <path d="M0,0 L10,5 L0,10 z" fill={KIND_COLOR[k]} />
               </marker>
             ))}
           </defs>
 
-          {/* System 경계 프레임 */}
-          <rect
-            x={frame.x}
-            y={frame.y}
-            width={frame.w}
-            height={frame.h}
-            rx={12}
-            fill="#f8fafc"
-            stroke="#94a3b8"
-            strokeWidth={1.4}
-            strokeDasharray="3 4"
-          />
-          <text
-            x={frame.x + 12}
-            y={frame.y - 8}
-            fontFamily="ui-monospace, monospace"
-            fontSize={12}
-            fontWeight={600}
-            fill="#64748b"
-          >
-            {systemLabel} · System 경계
-          </text>
+          <g ref={gRef} id="diagram-content" transform={`translate(${view.tx} ${view.ty}) scale(${view.k})`}>
+            {/* System 경계 프레임 */}
+            <rect x={frame.x} y={frame.y} width={frame.w} height={frame.h} rx={12} fill="#f8fafc" stroke="#94a3b8" strokeWidth={1.4} strokeDasharray="3 4" />
+            <text x={frame.x + 12} y={frame.y - 8} fontFamily="ui-monospace, monospace" fontSize={12} fontWeight={600} fill="#64748b">
+              {systemLabel} · System 경계
+            </text>
 
-          {/* 인터페이스 연결선 */}
-          {project.interfaces.map((it) => {
-            const cf = center(it.fromNodeId)
-            const ct = center(it.toNodeId)
-            if (!base[it.fromNodeId] || !base[it.toNodeId]) return null
-            const p1 = border(cf.x, cf.y, BLOCK.w, BLOCK.h, ct.x, ct.y)
-            const p2 = border(ct.x, ct.y, BLOCK.w, BLOCK.h, cf.x, cf.y)
-            const mid = midpoint(p1, p2)
-            const color = KIND_COLOR[it.kind]
-            const active = it.id === selIface
-            return (
-              <g key={it.id} style={{ cursor: 'pointer' }} onPointerDown={(e) => selectIface(e, it.id)}>
-                <line
-                  x1={p1.x}
-                  y1={p1.y}
-                  x2={p2.x}
-                  y2={p2.y}
-                  stroke={color}
-                  strokeWidth={active ? 3 : 2}
-                  markerEnd={`url(#arr-${it.kind})`}
-                />
-                <g>
-                  <rect
-                    x={mid.x - labelW(it.label) / 2}
-                    y={mid.y - 10}
-                    width={labelW(it.label)}
-                    height={18}
-                    rx={4}
-                    fill="#ffffff"
-                    stroke={active ? color : '#e2e8f0'}
-                  />
-                  <text
-                    x={mid.x}
-                    y={mid.y + 3}
-                    textAnchor="middle"
-                    fontFamily="ui-monospace, monospace"
-                    fontSize={11}
-                    fill="#0f172a"
-                  >
+            {/* 인터페이스 연결선 */}
+            {project.interfaces.map((it) => {
+              if (!base[it.fromNodeId] || !base[it.toNodeId]) return null
+              const cf = center(it.fromNodeId)
+              const ct = center(it.toNodeId)
+              const p1 = border(cf.x, cf.y, BLOCK.w, BLOCK.h, ct.x, ct.y)
+              const p2 = border(ct.x, ct.y, BLOCK.w, BLOCK.h, cf.x, cf.y)
+              const mid = midpoint(p1, p2)
+              const color = KIND_COLOR[it.kind]
+              const active = it.id === selIface
+              return (
+                <g key={it.id} style={{ cursor: 'pointer' }} onPointerDown={(e) => selectIface(e, it.id)}>
+                  <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke={color} strokeWidth={active ? 3 : 2} markerEnd={`url(#arr-${it.kind})`} />
+                  <rect x={mid.x - labelW(it.label) / 2} y={mid.y - 10} width={labelW(it.label)} height={18} rx={4} fill="#ffffff" stroke={active ? color : '#e2e8f0'} />
+                  <text x={mid.x} y={mid.y + 3} textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize={11} fill="#0f172a">
                     {it.label || '(라벨 없음)'}
                   </text>
                 </g>
-              </g>
-            )
-          })}
+              )
+            })}
 
-          {/* 연결 진행중 임시선 */}
-          {connect && (
-            <line
-              x1={center(connect.fromId).x}
-              y1={center(connect.fromId).y}
-              x2={connect.x}
-              y2={connect.y}
-              stroke="#2563eb"
-              strokeWidth={2}
-              strokeDasharray="6 5"
-            />
-          )}
+            {/* 연결 진행중 임시선 */}
+            {connect && (
+              <line x1={center(connect.fromId).x} y1={center(connect.fromId).y} x2={connect.x} y2={connect.y} stroke="#2563eb" strokeWidth={2} strokeDasharray="6 5" />
+            )}
 
-          {/* 블록 */}
-          {blocks.map((n) => {
-            const p = posOf(n.id)
-            const sel = n.id === selBlock
-            const cx = p.x + BLOCK.w / 2
-            const cy = p.y + BLOCK.h / 2
-            return (
-              <g key={n.id}>
-                {sel && (
-                  <rect
-                    x={p.x - 4}
-                    y={p.y - 4}
-                    width={BLOCK.w + 8}
-                    height={BLOCK.h + 8}
-                    rx={11}
-                    fill="none"
-                    stroke="#2563eb"
-                    strokeWidth={2.2}
-                  />
-                )}
-                <rect
-                  x={p.x}
-                  y={p.y}
-                  width={BLOCK.w}
-                  height={BLOCK.h}
-                  rx={9}
-                  fill="#ffffff"
-                  stroke="#94a3b8"
-                  strokeWidth={1.4}
-                  style={{ cursor: 'move' }}
-                  onPointerDown={(e) => startDrag(e, n)}
-                />
-                <text
-                  x={p.x + 14}
-                  y={p.y + 27}
-                  fontFamily="var(--font-ui, sans-serif)"
-                  fontSize={14}
-                  fontWeight={600}
-                  fill="#111827"
-                  style={{ pointerEvents: 'none' }}
-                >
-                  {truncate(n.name || '(이름 없음)')}
-                </text>
-                <text
-                  x={p.x + 14}
-                  y={p.y + 46}
-                  fontFamily="ui-monospace, monospace"
-                  fontSize={10}
-                  fill="#94a3b8"
-                  style={{ pointerEvents: 'none' }}
-                >
-                  SUBSYSTEM
-                </text>
-                {/* 연결 핸들 4개 */}
-                {[
-                  { x: cx, y: p.y },
-                  { x: p.x + BLOCK.w, y: cy },
-                  { x: cx, y: p.y + BLOCK.h },
-                  { x: p.x, y: cy },
-                ].map((h, i) => (
-                  <circle
-                    key={i}
-                    cx={h.x}
-                    cy={h.y}
-                    r={5}
-                    fill="#ffffff"
-                    stroke="#2563eb"
-                    strokeWidth={2}
-                    style={{ cursor: 'crosshair' }}
-                    onPointerDown={(e) => startConnect(e, n)}
-                  />
-                ))}
-              </g>
-            )
-          })}
+            {/* 블록 */}
+            {blocks.map((n) => {
+              const p = posOf(n.id)
+              const sel = n.id === selBlock
+              const cx = p.x + BLOCK.w / 2
+              const cy = p.y + BLOCK.h / 2
+              return (
+                <g key={n.id}>
+                  {sel && (
+                    <rect x={p.x - 4} y={p.y - 4} width={BLOCK.w + 8} height={BLOCK.h + 8} rx={11} fill="none" stroke="#2563eb" strokeWidth={2.2} />
+                  )}
+                  <rect x={p.x} y={p.y} width={BLOCK.w} height={BLOCK.h} rx={9} fill="#ffffff" stroke="#94a3b8" strokeWidth={1.4} style={{ cursor: 'move' }} onPointerDown={(e) => startDrag(e, n)} />
+                  <text x={p.x + 14} y={p.y + 27} fontFamily="sans-serif" fontSize={14} fontWeight={600} fill="#111827" style={{ pointerEvents: 'none' }}>
+                    {truncate(n.name || '(이름 없음)')}
+                  </text>
+                  <text x={p.x + 14} y={p.y + 46} fontFamily="ui-monospace, monospace" fontSize={10} fill="#94a3b8" style={{ pointerEvents: 'none' }}>
+                    SUBSYSTEM
+                  </text>
+                  {[
+                    { x: cx, y: p.y },
+                    { x: p.x + BLOCK.w, y: cy },
+                    { x: cx, y: p.y + BLOCK.h },
+                    { x: p.x, y: cy },
+                  ].map((h, i) => (
+                    <circle key={i} cx={h.x} cy={h.y} r={5} fill="#ffffff" stroke="#2563eb" strokeWidth={2} style={{ cursor: 'crosshair' }} onPointerDown={(e) => startConnect(e, n)} />
+                  ))}
+                </g>
+              )
+            })}
+          </g>
         </svg>
 
-        {/* 인터페이스 편집 팝오버 (HTML 오버레이) */}
+        {/* 인터페이스 편집 팝오버 (HTML 오버레이 — 줌/팬 반영해 배치) */}
         {iface && ifaceMid && (
           <div
             className="absolute z-10 w-64 -translate-x-1/2 rounded-lg border border-gray-300 bg-white p-3 shadow-lg"
-            style={{ left: ifaceMid.x, top: ifaceMid.y + 12 }}
+            style={{ left: view.tx + ifaceMid.x * view.k, top: view.ty + ifaceMid.y * view.k + 12 }}
           >
             <div className="mb-2 text-sm font-semibold text-gray-800">인터페이스 편집</div>
             <label className="block text-xs text-gray-500">
@@ -373,26 +340,17 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
                 종류 (kind)
                 <select
                   value={iface.kind}
-                  onChange={(e) =>
-                    fmea.updateInterface(iface.id, { kind: e.target.value as InterfaceKind })
-                  }
+                  onChange={(e) => fmea.updateInterface(iface.id, { kind: e.target.value as InterfaceKind })}
                   className="mt-0.5 block rounded-md border border-gray-300 px-2 py-1 text-sm"
                 >
                   {KINDS.map((k) => (
-                    <option key={k} value={k}>
-                      {k}
-                    </option>
+                    <option key={k} value={k}>{k}</option>
                   ))}
                 </select>
               </label>
               <button
                 type="button"
-                onClick={() =>
-                  fmea.updateInterface(iface.id, {
-                    fromNodeId: iface.toNodeId,
-                    toNodeId: iface.fromNodeId,
-                  })
-                }
+                onClick={() => fmea.updateInterface(iface.id, { fromNodeId: iface.toNodeId, toNodeId: iface.fromNodeId })}
                 className="rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100"
                 title="방향 바꾸기"
               >
@@ -405,10 +363,7 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
               </span>
               <button
                 type="button"
-                onClick={() => {
-                  fmea.removeInterface(iface.id)
-                  setSelIface(null)
-                }}
+                onClick={() => { fmea.removeInterface(iface.id); setSelIface(null) }}
                 className="shrink-0 rounded-md border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
               >
                 삭제
@@ -426,17 +381,33 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
     setSelBlock(null)
   }
 
+  // 줌/팬과 무관하게 전체 다이어그램을 원래 해상도로 내보낸다.
+  // 경계는 프레임 기하에서 계산(렌더 배율에 따른 getBBox 서브픽셀 편차 방지 → 결정적).
   function exportPng() {
     const svg = svgRef.current
-    if (!svg) return
-    const scale = 2
-    const xml = new XMLSerializer().serializeToString(svg)
+    const g = gRef.current
+    if (!svg || !g) return
+    const m = 16
+    const bx = frame.x
+    const by = frame.y - 22 // 프레임 상단 라벨 여유
+    const bw = frame.w
+    const bh = frame.h + 22
+    const w = Math.ceil(bw + m * 2)
+    const h = Math.ceil(bh + m * 2)
+    const clone = svg.cloneNode(true) as SVGSVGElement
+    const gc = clone.querySelector('#diagram-content')
+    gc?.removeAttribute('transform') // 배율/팬 제거
+    clone.setAttribute('width', String(w))
+    clone.setAttribute('height', String(h))
+    clone.setAttribute('viewBox', `${bx - m} ${by - m} ${w} ${h}`)
+    const xml = new XMLSerializer().serializeToString(clone)
     const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml)
     const img = new Image()
     img.onload = () => {
+      const scale = 2
       const canvas = document.createElement('canvas')
-      canvas.width = Math.ceil(W * scale)
-      canvas.height = Math.ceil(H * scale)
+      canvas.width = w * scale
+      canvas.height = h * scale
       const ctx = canvas.getContext('2d')
       if (!ctx) return
       ctx.fillStyle = '#ffffff'
