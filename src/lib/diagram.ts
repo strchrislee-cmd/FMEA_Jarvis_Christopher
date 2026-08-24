@@ -61,9 +61,34 @@ export function autoBlockPositions(nodes: StructureNode[]): Record<string, Pos> 
   return pos
 }
 
+// 드릴인 캔버스용: 특정 부모의 직속 자식을 그리드로 자동배치(레벨 무관, 부모 컨텍스트).
+export function childBlockPositions(
+  nodes: StructureNode[],
+  parentId: string,
+): Record<string, Pos> {
+  const pos: Record<string, Pos> = {}
+  nodes
+    .filter((n) => n.parentId === parentId)
+    .forEach((n, i) => {
+      const c = i % BLOCK.cols
+      const r = Math.floor(i / BLOCK.cols)
+      pos[n.id] = {
+        x: BLOCK.startX + c * (BLOCK.w + BLOCK.colGap),
+        y: BLOCK.startY + r * (BLOCK.h + BLOCK.rowGap),
+      }
+    })
+  return pos
+}
+
 // 실제 사용 좌표 = layout(저장된 override) ?? 자동배치(폴백).
-export function blockPositions(project: FmeaProject): Record<string, Pos> {
-  const auto = autoBlockPositions(project.structure)
+// drillInto가 있으면 그 부모의 자식(Component)만, 없으면 최상위(Subsystem)를 배치한다.
+export function blockPositions(
+  project: FmeaProject,
+  drillInto: string | null = null,
+): Record<string, Pos> {
+  const auto = drillInto
+    ? childBlockPositions(project.structure, drillInto)
+    : autoBlockPositions(project.structure)
   const pos: Record<string, Pos> = {}
   for (const id of Object.keys(auto)) pos[id] = project.layout[id] ?? auto[id]
   return pos

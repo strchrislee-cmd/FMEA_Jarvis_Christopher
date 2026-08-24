@@ -60,10 +60,22 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
   })
   const [preset, setPreset] = useState<PresetKey | null>('medium')
   const resizeRef = useRef<{ sx: number; sy: number; sw: number; sh: number; maxW: number } | null>(null)
+  // 블록 본체 더블클릭 감지용(포인터 캡처가 native dblclick을 삼켜 직접 타이밍 판정)
+  const lastClick = useRef<{ id: string; t: number } | null>(null)
+  // 드릴인: 진입한 Subsystem id(세션 UI, 저장 안 함). null이면 최상위.
+  const [drillInto, setDrillInto] = useState<string | null>(null)
 
-  const blocks = project.structure.filter((n) => n.level === 1)
+  // 진입한 Subsystem이 사라졌으면(삭제 등) 최상위로 강제 복귀
+  const drillParent = drillInto ? project.structure.find((n) => n.id === drillInto) ?? null : null
+  const inDrill = drillParent !== null
+
+  // 현재 컨텍스트의 블록: 최상위=Subsystem(level1), 드릴=그 부모의 Component(level2)
+  const blocks = inDrill
+    ? project.structure.filter((n) => n.parentId === drillParent!.id)
+    : project.structure.filter((n) => n.level === 1)
   const roots = project.structure.filter((n) => n.level === 0)
-  const base = blockPositions(project)
+  const base = blockPositions(project, inDrill ? drillParent!.id : null)
+  const blockIds = new Set(blocks.map((n) => n.id))
   const posOf = (id: string): Pos =>
     drag && drag.id === id ? { x: drag.x, y: drag.y } : base[id] ?? { x: 0, y: 0 }
   const center = (id: string): Pos => {
@@ -148,7 +160,8 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
     drag && drag.id === sysId
       ? { x: drag.x, y: drag.y }
       : project.layout[sysId] ?? { x: BLOCK.startX - pad, y: (slots[sysId]?.y ?? BLOCK.startY) - pad }
-  const systemBoxes = roots.map((sys) => {
+  // System 그룹 박스는 최상위에서만(드릴 화면은 헤더만, 부모 프레임 없음).
+  const systemBoxes = inDrill ? [] : roots.map((sys) => {
     const members = blocks.filter((b) => b.parentId === sys.id)
     const empty = members.length === 0
     let rect: { x: number; y: number; w: number; h: number }
@@ -195,6 +208,31 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
     const id = fmea.addNode(selSystem)
     setEditing(id)
   }
+  // 드릴인 안에서 Component 추가 (부모 = 현재 진입한 Subsystem)
+  function addComponent() {
+    if (!drillInto) return
+    const id = fmea.addNode(drillInto)
+    setEditing(id)
+  }
+
+  function resetContextState() {
+    setSelBlock(null)
+    setSelIface(null)
+    setSelSystem(null)
+    setEditing(null)
+    setConnect(null)
+    setDrag(null)
+    setView({ k: 1, tx: 0, ty: 0 })
+  }
+  // Subsystem 본체 더블클릭 → 내부(Component) 진입
+  function drillIntoNode(id: string) {
+    setDrillInto(id)
+    resetContextState()
+  }
+  function goUp() {
+    setDrillInto(null)
+    resetContextState()
+  }
 
   // 이름 재편집(이름 텍스트 더블클릭). 블록 본체 더블클릭은 향후 드릴인용으로 비워둔다.
   function startEdit(e: React.PointerEvent | React.MouseEvent, id: string) {
@@ -216,6 +254,14 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
 
   function startDrag(e: React.PointerEvent, node: StructureNode) {
     e.stopPropagation()
+    // 본체 더블클릭 = 드릴인(최상위 Subsystem만). native dblclick은 포인터 캡처로 삼켜지므로 타이밍 판정.
+    const now = Date.now()
+    if (!inDrill && lastClick.current?.id === node.id && now - lastClick.current.t < 350) {
+      lastClick.current = null
+      drillIntoNode(node.id)
+      return
+    }
+    lastClick.current = { id: node.id, t: now }
     svgRef.current?.setPointerCapture(e.pointerId)
     const p = toContent(e)
     const b = posOf(node.id)
@@ -321,10 +367,13 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
   if (editNode) {
     let cxp = BLOCK.startX + 10
     let cyp = BLOCK.startY + 8
-    if (editNode.level === 1) {
+    if (base[editNode.id]) {
+      // 현재 컨텍스트의 블록(최상위 Subsystem 또는 드릴 내 Component)
       const p = base[editNode.id]
-      if (p) { cxp = p.x + 10; cyp = p.y + 8 }
+      cxp = p.x + 10
+      cyp = p.y + 8
     } else {
+      // System 헤더(그룹 박스)
       const bx = systemBoxes.find((b) => b.id === editNode.id)
       if (bx) { cxp = bx.x + 12; cyp = bx.y + 8 }
     }
@@ -333,25 +382,57 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
 
   return (
     <div className="max-w-full">
+      {/* 드릴인 컨텍스트 라벨(비클릭) */}
+      {inDrill && (
+        <div className="mb-2 flex items-center gap-2 text-sm">
+          <button
+            type="button"
+            onClick={goUp}
+            className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
+          >
+            ← 상위로
+          </button>
+          <span className="text-xs text-gray-500">
+            {drillParent!.parentId ? nodeName(fmea, drillParent!.parentId) + ' › ' : ''}
+            <span className="font-semibold text-gray-700">
+              {drillParent!.name || '(이름 없음)'}
+            </span>
+            <span className="ml-1 text-gray-400">내부 · {levelLabel(type, 2)}</span>
+          </span>
+        </div>
+      )}
+
       {/* 툴바 */}
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        {/* 노드 생성 (기존 트리 추가 로직 재사용) */}
-        <button
-          type="button"
-          onClick={addSystem}
-          className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
-        >
-          + {levelLabel(type, 0)}
-        </button>
-        <button
-          type="button"
-          onClick={addSubsystem}
-          disabled={!selSystem}
-          title={selSystem ? undefined : `${levelLabel(type, 0)}을(를) 선택하면 추가할 수 있습니다`}
-          className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          + {levelLabel(type, 1)}
-        </button>
+        {/* 노드 생성 (기존 트리 추가 로직 재사용) — 컨텍스트별 버튼 */}
+        {inDrill ? (
+          <button
+            type="button"
+            onClick={addComponent}
+            className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
+          >
+            + {levelLabel(type, 2)}
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={addSystem}
+              className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
+            >
+              + {levelLabel(type, 0)}
+            </button>
+            <button
+              type="button"
+              onClick={addSubsystem}
+              disabled={!selSystem}
+              title={selSystem ? undefined : `${levelLabel(type, 0)}을(를) 선택하면 추가할 수 있습니다`}
+              className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              + {levelLabel(type, 1)}
+            </button>
+          </>
+        )}
         <span className="mx-1 h-4 w-px bg-gray-300" />
 
         <div className="inline-flex overflow-hidden rounded-md border border-gray-300">
@@ -377,7 +458,9 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
           ))}
         </div>
 
-        <span className="ml-auto text-xs text-gray-400">휠 줌 · 빈 곳 드래그로 팬 · 우하단 모서리로 크기 조절</span>
+        <span className="ml-auto text-xs text-gray-400">
+          휠 줌 · 빈 곳 드래그로 팬{!inDrill && ' · 블록 더블클릭으로 내부 진입'} · 이름 더블클릭으로 편집
+        </span>
         <button type="button" onClick={exportPng} className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100">PNG 내보내기</button>
       </div>
 
@@ -461,9 +544,9 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
               )
             })}
 
-            {/* 인터페이스 연결선 */}
+            {/* 인터페이스 연결선 — 현재 컨텍스트(양끝이 현재 블록)만 표시 */}
             {project.interfaces.map((it) => {
-              if (!base[it.fromNodeId] || !base[it.toNodeId]) return null
+              if (!blockIds.has(it.fromNodeId) || !blockIds.has(it.toNodeId)) return null
               const cf = center(it.fromNodeId)
               const ct = center(it.toNodeId)
               const p1 = border(cf.x, cf.y, BLOCK.w, BLOCK.h, ct.x, ct.y)
@@ -487,18 +570,33 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
               <line x1={center(connect.fromId).x} y1={center(connect.fromId).y} x2={connect.x} y2={connect.y} stroke="#2563eb" strokeWidth={2} strokeDasharray="6 5" />
             )}
 
-            {/* 블록 */}
+            {/* 블록 (최상위=Subsystem, 드릴=Component) */}
             {blocks.map((n) => {
               const p = posOf(n.id)
               const sel = n.id === selBlock
               const cx = p.x + BLOCK.w / 2
               const cy = p.y + BLOCK.h / 2
+              // 최상위 Subsystem: 자식 Component 수 배지 + 더블클릭 드릴인
+              const childCount = inDrill
+                ? 0
+                : project.structure.filter((c) => c.parentId === n.id).length
               return (
                 <g key={n.id}>
                   {sel && (
                     <rect x={p.x - 4} y={p.y - 4} width={BLOCK.w + 8} height={BLOCK.h + 8} rx={11} fill="none" stroke="#2563eb" strokeWidth={2.2} />
                   )}
-                  <rect x={p.x} y={p.y} width={BLOCK.w} height={BLOCK.h} rx={9} fill="#ffffff" stroke="#94a3b8" strokeWidth={1.4} style={{ cursor: 'move' }} onPointerDown={(e) => startDrag(e, n)} />
+                  <rect
+                    x={p.x}
+                    y={p.y}
+                    width={BLOCK.w}
+                    height={BLOCK.h}
+                    rx={9}
+                    fill="#ffffff"
+                    stroke="#94a3b8"
+                    strokeWidth={1.4}
+                    style={{ cursor: 'move' }}
+                    onPointerDown={(e) => startDrag(e, n)}
+                  />
                   {/* 이름 텍스트: 더블클릭으로 이름 편집(본체 더블클릭은 향후 드릴인용).
                       pointerDown은 전파만 막아 팬/캡처를 피한다(캡처 시 dblclick이 삼켜짐). 드래그는 본체로. */}
                   <text
@@ -515,8 +613,17 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
                     {truncate(n.name || '(이름 없음)')}
                   </text>
                   <text x={p.x + 14} y={p.y + 46} fontFamily="ui-monospace, monospace" fontSize={10} fill="#94a3b8" style={{ pointerEvents: 'none' }}>
-                    SUBSYSTEM
+                    {levelLabel(type, inDrill ? 2 : 1).toUpperCase()}
                   </text>
+                  {/* Component 개수 배지 + 진입 힌트(최상위 Subsystem에만) */}
+                  {!inDrill && childCount > 0 && (
+                    <g style={{ pointerEvents: 'none' }}>
+                      <rect x={p.x + BLOCK.w - 42} y={p.y + 8} width={34} height={16} rx={8} fill="#eff6ff" stroke="#bfdbfe" />
+                      <text x={p.x + BLOCK.w - 25} y={p.y + 20} textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize={10} fontWeight={600} fill="#2563eb">
+                        C {childCount}
+                      </text>
+                    </g>
+                  )}
                   {[
                     { x: cx, y: p.y },
                     { x: p.x + BLOCK.w, y: cy },
@@ -659,8 +766,13 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
         if (!blob) return
         const href = URL.createObjectURL(blob)
         const a = document.createElement('a')
+        const base0 = (project.meta.title || 'structure').trim().replace(/\s+/g, '_')
+        // 컨텍스트 반영: 최상위 vs 특정 Subsystem 내부
+        const ctx = inDrill
+          ? `_${(drillParent!.name || 'subsystem').trim().replace(/\s+/g, '_')}_내부`
+          : ''
         a.href = href
-        a.download = `${(project.meta.title || 'structure').trim().replace(/\s+/g, '_')}_${project.meta.type}_diagram.png`
+        a.download = `${base0}_${project.meta.type}${ctx}_diagram.png`
         a.click()
         URL.revokeObjectURL(href)
       }, 'image/png')
