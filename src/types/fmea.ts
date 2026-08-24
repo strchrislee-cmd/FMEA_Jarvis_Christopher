@@ -31,33 +31,43 @@ export interface FailureMode {
   functionId: string // 추적성: 어떤 기능의 고장모드인가
   text: string
 }
+// Severity(S)는 효과(FE)에 귀속한다.
 export interface FailureEffect {
   id: string
   failureModeId: string
   text: string
+  severity?: number // S 1~10
 }
+// Occurrence(O)/Detection(D)와 현재 관리(예방→O, 검출→D)는 원인(FC)에 귀속한다.
 export interface FailureCause {
   id: string
   failureModeId: string
   text: string
+  prevention?: string // 현재 예방관리 (→ O)
+  occurrence?: number // O 1~10
+  detectionControl?: string // 현재 검출관리 (→ D)
+  detection?: number // D 1~10
 }
 
-// ── 5. Risk Analysis (→ FailureMode 단위 평가) ────
-// S/O/D(1~10)만 저장한다. RPN/AP는 저장하지 않고 파생 계산한다(single source of truth).
-export interface RiskItem {
-  id: string
-  failureModeId: string
-  prevention: string // 현재 예방관리
-  detection: string // 현재 검출관리
-  severity: number // S 1~10
-  occurrence: number // O 1~10
-  detectability: number // D 1~10
+// ── 5. Risk Analysis ──────────────────────────
+// S/O/D는 FE/FC에 저장하고, 행(FE×FM×FC)·RPN·AP는 파생 계산한다(single source of truth).
+// 척도표(scales)와 AP 조합표(apTable)는 편집 가능한 config로 프로젝트에 저장한다.
+export type ApTable = Record<string, ApLevel> // key = "s-o-d" (예: "7-3-4")
+export interface ScaleTable {
+  S: string[] // index i = 등급 (i+1) 의 설명, 길이 10
+  O: string[]
+  D: string[]
+}
+export interface ScaleTables {
+  DFMEA: ScaleTable
+  PFMEA: ScaleTable
 }
 
-// ── 6. Optimization (→ RiskItem에 연결) ───────────
+// ── 6. Optimization ───────────────────────────
+// O/D 저감 조치는 원인(FC) 단위 → failureCauseId 앵커(Phase 6에서 확정).
 export interface OptimizationItem {
   id: string
-  riskId: string
+  failureCauseId: string
   recommendedAction: string
   responsibility: string
   targetDate: string
@@ -103,7 +113,8 @@ export interface FmeaProject {
   failureModes: FailureMode[]
   failureEffects: FailureEffect[]
   failureCauses: FailureCause[]
-  risks: RiskItem[]
   optimizations: OptimizationItem[]
+  scales: ScaleTables // S/O/D 척도표 (유형별, 편집 가능)
+  apTable: ApTable // AP 조합표 (편집/불러오기 가능, 미설정 시 빈 객체)
   documentation: Documentation
 }

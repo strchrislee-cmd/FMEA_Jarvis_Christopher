@@ -49,25 +49,35 @@ export function deletionImpact(
 
 // ── cascade 정리 헬퍼 (계층형, 단일 경로) ──────────
 // 평면 정규화 모델의 참조 무결성을 위해 연쇄를 따라 정리한다:
-//   structure → function → failureMode → failureEffect/Cause → risk → optimization
+//   structure → function → failureMode → failureEffect / failureCause → optimization
 // 상위 헬퍼가 하위 헬퍼를 재사용하므로 정리 로직이 한 곳에만 존재한다
 // (직접 삭제 경로가 여러 개여도 같은 경로를 타서 고아가 생기지 않는다).
 
-// FM 집합 제거 → 딸린 FE/FC/risk/optimization까지 정리
+// FC 집합 제거 → 앵커된 optimization까지 정리 (S/O/D·관리는 FC 필드라 함께 사라짐)
+export function removeFailureCauses(
+  project: FmeaProject,
+  causeIds: Set<string>,
+): FmeaProject {
+  return {
+    ...project,
+    failureCauses: project.failureCauses.filter((c) => !causeIds.has(c.id)),
+    optimizations: project.optimizations.filter((o) => !causeIds.has(o.failureCauseId)),
+  }
+}
+
+// FM 집합 제거 → 딸린 FE, 그리고 FC 이하(removeFailureCauses)까지 정리
 export function removeFailureModes(
   project: FmeaProject,
   modeIds: Set<string>,
 ): FmeaProject {
-  const removedRisks = new Set(
-    project.risks.filter((r) => modeIds.has(r.failureModeId)).map((r) => r.id),
+  const causeIds = new Set(
+    project.failureCauses.filter((c) => modeIds.has(c.failureModeId)).map((c) => c.id),
   )
+  const cleaned = removeFailureCauses(project, causeIds)
   return {
-    ...project,
-    failureModes: project.failureModes.filter((m) => !modeIds.has(m.id)),
-    failureEffects: project.failureEffects.filter((e) => !modeIds.has(e.failureModeId)),
-    failureCauses: project.failureCauses.filter((c) => !modeIds.has(c.failureModeId)),
-    risks: project.risks.filter((r) => !removedRisks.has(r.id)),
-    optimizations: project.optimizations.filter((o) => !removedRisks.has(o.riskId)),
+    ...cleaned,
+    failureModes: cleaned.failureModes.filter((m) => !modeIds.has(m.id)),
+    failureEffects: cleaned.failureEffects.filter((e) => !modeIds.has(e.failureModeId)),
   }
 }
 

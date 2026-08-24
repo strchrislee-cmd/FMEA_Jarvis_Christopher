@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import type {
+  ApLevel,
   FmeaProject,
+  FmeaType,
   FourM,
   Planning,
   ProjectMeta,
@@ -8,7 +10,16 @@ import type {
 import { loadProject, saveProject, loadUi, saveUi } from '../lib/storage'
 import { STEPS } from '../lib/steps'
 import { newId } from '../lib/id'
-import { deleteStructureNode, removeFailureModes, removeFunctions } from '../lib/structure'
+import { apKey } from '../lib/risk'
+import { normalizeProject } from '../lib/factory'
+import {
+  deleteStructureNode,
+  removeFailureCauses,
+  removeFailureModes,
+  removeFunctions,
+} from '../lib/structure'
+
+type ScaleDim = 'S' | 'O' | 'D'
 
 // FMEA 프로젝트 1건 + UI 커서(currentStep)를 관리하고 localStorage에 자동 저장한다.
 export function useFmea() {
@@ -128,11 +139,50 @@ export function useFmea() {
     }))
   }
 
+  // FC 삭제는 같은 연쇄 정리 경로(앵커된 optimization 함께 제거;
+  // O/D·관리는 FC 필드라 FC와 함께 사라짐)
   function removeFailureCause(id: string) {
+    setProject((p) => removeFailureCauses(p, new Set([id])))
+  }
+
+  // ── Step 5: Risk (S→FE, O/D·관리→FC / 척도표 / AP표) ──
+  function setEffectSeverity(feId: string, s: number | undefined) {
     setProject((p) => ({
       ...p,
-      failureCauses: p.failureCauses.filter((c) => c.id !== id),
+      failureEffects: p.failureEffects.map((e) =>
+        e.id === feId ? { ...e, severity: s } : e,
+      ),
     }))
+  }
+
+  function patchCause(fcId: string, patch: Partial<{ occurrence: number; detection: number; prevention: string; detectionControl: string }>) {
+    setProject((p) => ({
+      ...p,
+      failureCauses: p.failureCauses.map((c) => (c.id === fcId ? { ...c, ...patch } : c)),
+    }))
+  }
+
+  // 척도표: 현재 유형의 S/O/D 등급 설명 편집 (index 0 = 등급 1)
+  function setScale(type: FmeaType, dim: ScaleDim, index: number, text: string) {
+    setProject((p) => {
+      const table = p.scales[type]
+      const next = [...table[dim]]
+      next[index] = text
+      return { ...p, scales: { ...p.scales, [type]: { ...table, [dim]: next } } }
+    })
+  }
+
+  // AP 조합표: (S,O,D)→레벨 항목 추가/삭제
+  function setApEntry(s: number, o: number, d: number, level: ApLevel) {
+    setProject((p) => ({ ...p, apTable: { ...p.apTable, [apKey(s, o, d)]: level } }))
+  }
+
+  function removeApEntry(key: string) {
+    setProject((p) => {
+      const next = { ...p.apTable }
+      delete next[key]
+      return { ...p, apTable: next }
+    })
   }
 
   // ── 스텝 이동 ─────────────────────────────────
@@ -148,8 +198,9 @@ export function useFmea() {
     setCurrentStep(Math.min(STEPS.length - 1, Math.max(0, step)))
   }
 
-  function importProject(next: FmeaProject) {
-    setProject(next)
+  // 불러온 JSON도 정규화(누락 필드 보정, 구버전 형태 방어)
+  function importProject(next: unknown) {
+    setProject(normalizeProject(next))
   }
 
   return {
@@ -171,6 +222,11 @@ export function useFmea() {
     removeFailureEffect,
     addFailureCause,
     removeFailureCause,
+    setEffectSeverity,
+    patchCause,
+    setScale,
+    setApEntry,
+    removeApEntry,
     goPrev,
     goNext,
     goTo,

@@ -84,7 +84,7 @@ export default function FailureEditor({ fmea }: { fmea: Fmea }) {
                       onClick={() => setModeId(m.id)}
                       className={`flex-1 rounded-md px-2 py-1 text-left text-sm ${
                         active
-                          ? 'bg-rose-600 text-white'
+                          ? 'bg-blue-600 text-white'
                           : 'border border-gray-200 hover:bg-gray-50'
                       }`}
                     >
