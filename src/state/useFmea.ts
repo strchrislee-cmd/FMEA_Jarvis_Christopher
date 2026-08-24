@@ -4,6 +4,7 @@ import type {
   FmeaProject,
   FmeaType,
   FourM,
+  Interface,
   OptimizationItem,
   Planning,
   ProjectMeta,
@@ -179,6 +180,26 @@ export function useFmea() {
     setProject((p) => ({ ...p, scales: { ...p.scales, [type]: table } }))
   }
 
+  // ── 블록다이어그램: 배치 좌표(위성) + 인터페이스 ──
+  function setNodePosition(nodeId: string, pos: { x: number; y: number }) {
+    setProject((p) => ({ ...p, layout: { ...p.layout, [nodeId]: pos } }))
+  }
+
+  function addInterface(iface: Interface) {
+    setProject((p) => ({ ...p, interfaces: [...p.interfaces, iface] }))
+  }
+
+  function updateInterface(id: string, patch: Partial<Interface>) {
+    setProject((p) => ({
+      ...p,
+      interfaces: p.interfaces.map((i) => (i.id === id ? { ...i, ...patch } : i)),
+    }))
+  }
+
+  function removeInterface(id: string) {
+    setProject((p) => ({ ...p, interfaces: p.interfaces.filter((i) => i.id !== id) }))
+  }
+
   // AP 조합표: (S,O,D)→레벨 항목 추가/삭제
   function setApEntry(s: number, o: number, d: number, level: ApLevel) {
     setProject((p) => ({ ...p, apTable: { ...p.apTable, [apKey(s, o, d)]: level } }))
@@ -268,6 +289,10 @@ export function useFmea() {
     setScaleTable,
     setApEntry,
     removeApEntry,
+    setNodePosition,
+    addInterface,
+    updateInterface,
+    removeInterface,
     addOptimization,
     updateOptimization,
     removeOptimization,

@@ -26,6 +26,8 @@ export function createEmptyProject(): FmeaProject {
     scales: defaultScales(),
     apTable: {},
     documentation: { summary: '' },
+    interfaces: [],
+    layout: {},
   }
 }
 
@@ -65,5 +67,7 @@ export function normalizeProject(raw: unknown): FmeaProject {
     },
     apTable: obj(p.apTable) as FmeaProject['apTable'],
     documentation: { ...base.documentation, ...obj(p.documentation) } as FmeaProject['documentation'],
+    interfaces: arr(p.interfaces),
+    layout: obj(p.layout) as FmeaProject['layout'],
   }
 }

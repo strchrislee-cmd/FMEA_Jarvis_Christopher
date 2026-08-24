@@ -121,8 +121,15 @@ export function deleteStructureNode(
     project.functions.filter((f) => removedNodes.has(f.structureNodeId)).map((f) => f.id),
   )
   const cleaned = removeFunctions(project, removedFunctions)
+  // 같은 삭제 경로에서 노드에 앵커된 인터페이스와 배치 좌표도 정리(고아 방지)
+  const layout = { ...cleaned.layout }
+  for (const id of removedNodes) delete layout[id]
   return {
     ...cleaned,
     structure: cleaned.structure.filter((n) => !removedNodes.has(n.id)),
+    interfaces: cleaned.interfaces.filter(
+      (i) => !removedNodes.has(i.fromNodeId) && !removedNodes.has(i.toNodeId),
+    ),
+    layout,
   }
 }

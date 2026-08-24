@@ -85,6 +85,21 @@ export interface Documentation {
   summary: string
 }
 
+// ── 블록다이어그램 (Structure Analysis 편집기) ──
+// 인터페이스: 구조 노드(블록) 간 상호작용. 연결선엔 신호 이름(label)과 kind만.
+// (N/C/X 분류는 이후 P-Diagram에서 블록 단위로 다룬다 — 연결선엔 없음.)
+export type InterfaceKind = '신호' | '전원' | '기계'
+export interface Interface {
+  id: string
+  fromNodeId: string
+  toNodeId: string
+  label: string
+  kind: InterfaceKind
+}
+// 배치 좌표 위성 데이터. 도메인 배열엔 좌표를 넣지 않는다.
+// 노드 id로 키하며, 좌표 없는 노드는 자동배치로 폴백한다.
+export type Layout = Record<string, { x: number; y: number }>
+
 // ── 1. Planning & Preparation ─────────────────
 // 헤더 성격의 메타(제목/유형/방식)와 계획 내용(범위/경계/가정/팀)을 나눈다.
 export interface ProjectMeta {
@@ -120,4 +135,6 @@ export interface FmeaProject {
   scales: ScaleTables // S/O/D 척도표 (유형별, 편집 가능)
   apTable: ApTable // AP 조합표 (편집/불러오기 가능, 미설정 시 빈 객체)
   documentation: Documentation
+  interfaces: Interface[] // 블록 간 인터페이스(평면+id)
+  layout: Layout // 블록 배치 좌표(위성, 별도 섹션) — 도메인 배열과 독립
 }
