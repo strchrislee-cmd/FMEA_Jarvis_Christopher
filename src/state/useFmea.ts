@@ -7,6 +7,7 @@ import type {
   OptimizationItem,
   Planning,
   ProjectMeta,
+  ScaleTable,
 } from '../types/fmea'
 import { loadProject, saveProject, loadUi, saveUi } from '../lib/storage'
 import { STEPS } from '../lib/steps'
@@ -173,6 +174,11 @@ export function useFmea() {
     })
   }
 
+  // 척도표 전체 교체 (회사 기본값 프리셋 불러오기 등)
+  function setScaleTable(type: FmeaType, table: ScaleTable) {
+    setProject((p) => ({ ...p, scales: { ...p.scales, [type]: table } }))
+  }
+
   // AP 조합표: (S,O,D)→레벨 항목 추가/삭제
   function setApEntry(s: number, o: number, d: number, level: ApLevel) {
     setProject((p) => ({ ...p, apTable: { ...p.apTable, [apKey(s, o, d)]: level } }))
@@ -259,6 +265,7 @@ export function useFmea() {
     setEffectSeverity,
     patchCause,
     setScale,
+    setScaleTable,
     setApEntry,
     removeApEntry,
     addOptimization,

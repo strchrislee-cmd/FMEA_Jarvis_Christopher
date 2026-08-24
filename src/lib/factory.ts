@@ -1,13 +1,15 @@
 import type { FmeaProject, ScaleTable, ScaleTables } from '../types/fmea'
+import { dfmeaScalePreset } from './scalePreset'
 
 function emptyScaleTable(): ScaleTable {
-  // 등급 1~10, 기본값은 빈칸 (핸드북 원문 하드코딩 금지 — 사용자가 사내 기준으로 채움)
+  // 등급 1~10, 기본값은 빈칸 (사용자가 사내 기준으로 채움)
   const blanks = () => Array.from({ length: 10 }, () => '')
   return { S: blanks(), O: blanks(), D: blanks() }
 }
 
-function emptyScales(): ScaleTables {
-  return { DFMEA: emptyScaleTable(), PFMEA: emptyScaleTable() }
+function defaultScales(): ScaleTables {
+  // DFMEA는 회사 기준표 프리셋을 기본값으로, PFMEA는 빈칸(공정관리 기준은 별도)
+  return { DFMEA: dfmeaScalePreset(), PFMEA: emptyScaleTable() }
 }
 
 // 빈 FMEA 프로젝트 1건 생성 (기본값)
@@ -21,7 +23,7 @@ export function createEmptyProject(): FmeaProject {
     failureEffects: [],
     failureCauses: [],
     optimizations: [],
-    scales: emptyScales(),
+    scales: defaultScales(),
     apTable: {},
     documentation: { summary: '' },
   }

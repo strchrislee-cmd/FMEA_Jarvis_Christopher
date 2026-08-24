@@ -3,6 +3,7 @@ import type { ApLevel, FmeaType } from '../types/fmea'
 import type { useFmea } from '../state/useFmea'
 import { buildRiskRows } from '../lib/risk'
 import { helpFor, type FieldKey } from '../lib/help'
+import { dfmeaScalePreset, DFMEA_SCALE_NOTE } from '../lib/scalePreset'
 import FieldHelp from './FieldHelp'
 
 type Fmea = ReturnType<typeof useFmea>
@@ -134,11 +135,29 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
 
 function ScaleTableEditor({ fmea, type }: { fmea: Fmea; type: FmeaType }) {
   const table = fmea.project.scales[type]
+
+  // DFMEA에만 회사 기준표 프리셋 제공(D는 Design Control 기준). 편집 후에도 되돌릴 수 있게.
+  function loadPreset() {
+    const has = (['S', 'O', 'D'] as const).some((d) => table[d].some((c) => c.trim()))
+    if (has && !window.confirm('현재 DFMEA 척도표를 회사 기본값으로 덮어씁니다. 계속할까요?'))
+      return
+    fmea.setScaleTable('DFMEA', dfmeaScalePreset())
+  }
+
   return (
     <section>
-      <h3 className="mb-1 text-sm font-medium text-gray-700">
-        S/O/D 척도표 · {type}
-      </h3>
+      <div className="mb-1 flex items-center justify-between">
+        <h3 className="text-sm font-medium text-gray-700">S/O/D 척도표 · {type}</h3>
+        {type === 'DFMEA' && (
+          <button
+            type="button"
+            onClick={loadPreset}
+            className="rounded-md border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
+          >
+            회사 기본값 불러오기
+          </button>
+        )}
+      </div>
       <p className="mb-2 text-xs text-gray-400">
         등급 1~10의 의미를 사내 기준으로 직접 입력하세요. (핸드북 원문 대신 자체 정의)
       </p>
@@ -171,6 +190,9 @@ function ScaleTableEditor({ fmea, type }: { fmea: Fmea; type: FmeaType }) {
           </tbody>
         </table>
       </div>
+      {type === 'DFMEA' && (
+        <p className="mt-2 text-xs text-gray-400">※ {DFMEA_SCALE_NOTE}</p>
+      )}
     </section>
   )
 }
