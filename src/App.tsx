@@ -14,7 +14,7 @@ export default function App() {
       <div className="flex flex-1 overflow-hidden">
         <Stepper currentStep={currentStep} onSelect={goTo} />
         <InputArea fmea={fmea} />
-        <GuidePanel currentStep={currentStep} fmeaType={project.meta.type} />
+        <GuidePanel fmea={fmea} />
       </div>
     </div>
   )

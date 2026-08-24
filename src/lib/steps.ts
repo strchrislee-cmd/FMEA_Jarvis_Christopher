@@ -1,4 +1,4 @@
-import type { FmeaType } from '../types/fmea'
+import type { FmeaType, Planning } from '../types/fmea'
 
 // AIAG-VDA 7단계 가이드 정의. example은 '예시 보기' 토글에서 보여줄 워크드 예시.
 export interface StepGuide {
@@ -6,6 +6,40 @@ export interface StepGuide {
   title: string
   description: string
   example: (type: FmeaType) => string
+}
+
+// Step 1 세트 예시: scope/in-scope/out-of-scope/가정 네 칸이 맞물린 완성 예시.
+// 자동차 전장/LED 조명 계열(LED 헤드램프)로 통일. DFMEA=설계, PFMEA=조립 공정 관점.
+export type Step1Example = Pick<
+  Planning,
+  'scope' | 'inScope' | 'outOfScope' | 'assumptions'
+>
+
+const STEP1_EXAMPLES: Record<FmeaType, Step1Example> = {
+  DFMEA: {
+    scope:
+      'LED 헤드램프 제어 모듈(LDM) 설계 FMEA. 품번 A123-45(로우/하이빔 통합 구동), 적용 차종 X-SUV 2026 MY. 정전류 구동·조도 제어·고장진단 회로를 대상으로 한다.',
+    inScope:
+      'LED 드라이버 IC, 정전류 제어 회로, 방열(써멀) 설계, 커넥터·하네스 인터페이스, 오픈/쇼트 검출 진단 로직. (구조 트리에 들어갈 항목)',
+    outOfScope:
+      'LED 광원 모듈 자체(공급사 DVP로 검증됨), 차량 통신 버스(별도 네트워크 FMEA), 하우징 방수(기구 FMEA 담당). — 제외 이유: 각각 별도 검증 체계로 커버되어 중복 분석을 피하기 위함.',
+    assumptions:
+      '공급전압 12V±10%·동작온도 -40~85℃ 전제. LED Vf는 공급사 규격 준수로 가정. 이전 세대 B-Sedan LDM(품번 A100-10) 설계 자산을 참조. 방열판 사양은 아직 미확정(초기값)으로 두고 평가한다.',
+  },
+  PFMEA: {
+    scope:
+      'LED 헤드램프 모듈 조립 공정 FMEA. 라인 L-07, 완성품 품번 A123-45. PCB 실장 이후~렌즈 접합~기밀검사까지의 조립 공정을 대상으로 한다.',
+    inScope:
+      'PCB 스크루 체결, 커넥터 삽입, 방열 그리스 도포, 렌즈 접착·경화, 기밀(리크) 검사 공정. (공정 트리에 들어갈 항목)',
+    outOfScope:
+      'LED 기판 SMT 전공정(별도 PFMEA), 원자재 입고검사(수입검사 절차서로 관리), 포장·출하. — 제외 이유: 전공정·입고 단계는 별도 관리 체계가 있어 이 라인 범위에서 제외.',
+    assumptions:
+      '작업자는 표준작업 교육 이수로 가정. 접착제 경화온도 관리기준은 양산 검증 전이라 잠정값. 설비는 정기 예방보전(PM) 완료 상태를 전제. 이전 X-SUV 리어램프 라인(L-05) 공정 실적을 참조한다.',
+  },
+}
+
+export function step1Example(type: FmeaType): Step1Example {
+  return STEP1_EXAMPLES[type]
 }
 
 export const STEPS: StepGuide[] = [
