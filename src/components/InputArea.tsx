@@ -9,9 +9,18 @@ import OptimizationEditor from './OptimizationEditor'
 import DocumentationView from './DocumentationView'
 
 type Fmea = ReturnType<typeof useFmea>
+export type StructureTab = 'tree' | 'diagram'
 
 // 중앙 입력 영역: 단계별 편집기 라우팅.
-export default function InputArea({ fmea }: { fmea: Fmea }) {
+export default function InputArea({
+  fmea,
+  structureTab,
+  setStructureTab,
+}: {
+  fmea: Fmea
+  structureTab: StructureTab
+  setStructureTab: (t: StructureTab) => void
+}) {
   const { currentStep, goPrev, goNext } = fmea
   const step = STEPS[currentStep]
   const isFirst = currentStep === 0
@@ -26,7 +35,7 @@ export default function InputArea({ fmea }: { fmea: Fmea }) {
         {currentStep === 0 ? (
           <StepPlanning fmea={fmea} />
         ) : currentStep === 1 ? (
-          <StructureEditor fmea={fmea} />
+          <StructureEditor fmea={fmea} tab={structureTab} setTab={setStructureTab} />
         ) : currentStep === 2 ? (
           <FunctionEditor fmea={fmea} />
         ) : currentStep === 3 ? (

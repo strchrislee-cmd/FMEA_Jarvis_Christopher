@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import type { StructureNode, FourM } from '../types/fmea'
 import type { useFmea } from '../state/useFmea'
 import { childrenOf, deletionImpact, levelLabel } from '../lib/structure'
@@ -12,11 +11,18 @@ const FOUR_M: FourM[] = ['Man', 'Machine', 'Material', 'Method']
 const LEVEL_KEYS: FieldKey[] = ['structL0', 'structL1', 'structL2']
 
 // Step 2: Structure Analysis — 트리 편집 / 다이어그램 탭 전환 (다이어그램은 트리에서 자동 생성)
-export default function StructureEditor({ fmea }: { fmea: Fmea }) {
-  const [tab, setTab] = useState<Tab>('tree')
-
+// 다이어그램 탭은 폭을 넓게 쓰도록 max-w 캡을 두지 않는다(트리 탭·다른 폼 폭은 그대로).
+export default function StructureEditor({
+  fmea,
+  tab,
+  setTab,
+}: {
+  fmea: Fmea
+  tab: Tab
+  setTab: (t: Tab) => void
+}) {
   return (
-    <div className="max-w-3xl">
+    <div>
       {/* 탭 전환 */}
       <div className="mb-4 inline-flex overflow-hidden rounded-md border border-gray-300">
         {(['tree', 'diagram'] as Tab[]).map((t) => (
@@ -36,7 +42,9 @@ export default function StructureEditor({ fmea }: { fmea: Fmea }) {
       {tab === 'diagram' ? (
         <StructureDiagram fmea={fmea} />
       ) : (
-        <TreeTab fmea={fmea} />
+        <div className="max-w-3xl">
+          <TreeTab fmea={fmea} />
+        </div>
       )}
     </div>
   )
