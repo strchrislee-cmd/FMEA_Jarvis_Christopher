@@ -126,16 +126,38 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
     )
   }
 
-  // System 경계 프레임 = 블록 바운딩 박스 + 여백
-  let fx1 = Infinity, fy1 = Infinity, fx2 = -Infinity, fy2 = -Infinity
+  // System(level 0)별 그룹 박스 = 소속 Subsystem 블록들을 감싸는 계산된 경계(저장 안 함).
+  const pad = 24
+  const systemBoxes = roots
+    .map((sys) => {
+      const members = blocks.filter((b) => b.parentId === sys.id)
+      if (members.length === 0) return null
+      let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity
+      for (const m of members) {
+        const p = posOf(m.id)
+        x1 = Math.min(x1, p.x); y1 = Math.min(y1, p.y)
+        x2 = Math.max(x2, p.x + BLOCK.w); y2 = Math.max(y2, p.y + BLOCK.h)
+      }
+      return {
+        id: sys.id,
+        name: sys.name || '(이름 없음)',
+        x: x1 - pad, y: y1 - pad, w: x2 - x1 + pad * 2, h: y2 - y1 + pad * 2,
+      }
+    })
+    .filter((b): b is NonNullable<typeof b> => b !== null)
+
+  // 전체 콘텐츠 경계(PNG 내보내기·라벨 여유 포함)
+  let cx1 = Infinity, cy1 = Infinity, cx2 = -Infinity, cy2 = -Infinity
+  for (const box of systemBoxes) {
+    cx1 = Math.min(cx1, box.x); cy1 = Math.min(cy1, box.y - 22)
+    cx2 = Math.max(cx2, box.x + box.w); cy2 = Math.max(cy2, box.y + box.h)
+  }
   for (const b of blocks) {
     const p = posOf(b.id)
-    fx1 = Math.min(fx1, p.x); fy1 = Math.min(fy1, p.y)
-    fx2 = Math.max(fx2, p.x + BLOCK.w); fy2 = Math.max(fy2, p.y + BLOCK.h)
+    cx1 = Math.min(cx1, p.x); cy1 = Math.min(cy1, p.y)
+    cx2 = Math.max(cx2, p.x + BLOCK.w); cy2 = Math.max(cy2, p.y + BLOCK.h)
   }
-  const pad = 24
-  const frame = { x: fx1 - pad, y: fy1 - pad, w: fx2 - fx1 + pad * 2, h: fy2 - fy1 + pad * 2 }
-  const systemLabel = roots.map((r) => r.name || '(이름 없음)').join(' · ') || 'System 경계'
+  const contentBounds = { x: cx1, y: cy1, w: cx2 - cx1, h: cy2 - cy1 }
 
   function startDrag(e: React.PointerEvent, node: StructureNode) {
     e.stopPropagation()
@@ -235,11 +257,15 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
           </defs>
 
           <g ref={gRef} id="diagram-content" transform={`translate(${view.tx} ${view.ty}) scale(${view.k})`}>
-            {/* System 경계 프레임 */}
-            <rect x={frame.x} y={frame.y} width={frame.w} height={frame.h} rx={12} fill="#f8fafc" stroke="#94a3b8" strokeWidth={1.4} strokeDasharray="3 4" />
-            <text x={frame.x + 12} y={frame.y - 8} fontFamily="ui-monospace, monospace" fontSize={12} fontWeight={600} fill="#64748b">
-              {systemLabel} · System 경계
-            </text>
+            {/* System(level 0) 그룹 박스 — 소속 Subsystem을 감싼다 */}
+            {systemBoxes.map((box) => (
+              <g key={box.id}>
+                <rect x={box.x} y={box.y} width={box.w} height={box.h} rx={12} fill="#f8fafc" stroke="#94a3b8" strokeWidth={1.4} strokeDasharray="3 4" />
+                <text x={box.x + 12} y={box.y - 8} fontFamily="ui-monospace, monospace" fontSize={12} fontWeight={600} fill="#64748b">
+                  {box.name} · System
+                </text>
+              </g>
+            ))}
 
             {/* 인터페이스 연결선 */}
             {project.interfaces.map((it) => {
@@ -369,12 +395,10 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
     const g = gRef.current
     if (!svg || !g) return
     const m = 16
-    const bx = frame.x
-    const by = frame.y - 22 // 프레임 상단 라벨 여유
-    const bw = frame.w
-    const bh = frame.h + 22
-    const w = Math.ceil(bw + m * 2)
-    const h = Math.ceil(bh + m * 2)
+    const bx = contentBounds.x
+    const by = contentBounds.y
+    const w = Math.ceil(contentBounds.w + m * 2)
+    const h = Math.ceil(contentBounds.h + m * 2)
     const clone = svg.cloneNode(true) as SVGSVGElement
     const gc = clone.querySelector('#diagram-content')
     gc?.removeAttribute('transform') // 배율/팬 제거
