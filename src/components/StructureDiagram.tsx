@@ -15,6 +15,16 @@ const KIND_COLOR: Record<InterfaceKind, string> = {
 }
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v))
 
+// 캔버스 겉 크기 프리셋(가로·세로). 세션 UI, 저장 안 함. "크게"는 넓은 폭을 요청하고
+// 컨테이너 max-w-full이 사용 가능한 폭까지 채운다.
+type PresetKey = 'small' | 'medium' | 'large'
+const CANVAS_MIN = { w: 360, h: 300 }
+const PRESETS: Record<PresetKey, { w: number; h: number; label: string }> = {
+  small: { w: 560, h: 420, label: '작게' },
+  medium: { w: 900, h: 560, label: '보통' },
+  large: { w: 100000, h: 760, label: '크게' },
+}
+
 function border(cx: number, cy: number, w: number, h: number, tx: number, ty: number): Pos {
   const dx = tx - cx
   const dy = ty - cy
@@ -39,6 +49,14 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
   const [selIface, setSelIface] = useState<string | null>(null)
   const [selBlock, setSelBlock] = useState<string | null>(null)
   const [view, setView] = useState<View>({ k: 1, tx: 0, ty: 0 })
+  // 캔버스 겉 크기(px) — React가 소유. 프리셋 또는 모서리 드래그로 변경.
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [size, setSize] = useState<{ w: number; h: number }>({
+    w: PRESETS.medium.w,
+    h: PRESETS.medium.h,
+  })
+  const [preset, setPreset] = useState<PresetKey | null>('medium')
+  const resizeRef = useRef<{ sx: number; sy: number; sw: number; sh: number; maxW: number } | null>(null)
 
   const blocks = project.structure.filter((n) => n.level === 1)
   const roots = project.structure.filter((n) => n.level === 0)
@@ -176,6 +194,37 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
     setConnect({ fromId: node.id, x: p.x, y: p.y })
   }
 
+  function applyPreset(key: PresetKey) {
+    // "크게"는 사용 가능한 폭(부모 clientWidth)까지 실제로 채운다(넓힌 영역 활용).
+    const avail = containerRef.current?.parentElement?.clientWidth ?? PRESETS[key].w
+    const w = key === 'large' ? Math.max(PRESETS.medium.w, avail) : PRESETS[key].w
+    setSize({ w, h: PRESETS[key].h })
+    setPreset(key)
+  }
+
+  // 우하단 모서리 드래그 리사이즈(React 소유). 드래그하면 프리셋 표시 해제.
+  function onResizeDown(e: React.PointerEvent) {
+    e.stopPropagation()
+    e.preventDefault()
+    const el = containerRef.current
+    if (!el) return
+    ;(e.target as Element).setPointerCapture(e.pointerId)
+    const r = el.getBoundingClientRect()
+    const maxW = el.parentElement?.clientWidth ?? r.width
+    resizeRef.current = { sx: e.clientX, sy: e.clientY, sw: r.width, sh: r.height, maxW }
+  }
+  function onResizeMove(e: React.PointerEvent) {
+    const d = resizeRef.current
+    if (!d) return
+    const w = clamp(d.sw + (e.clientX - d.sx), CANVAS_MIN.w, d.maxW)
+    const h = Math.max(CANVAS_MIN.h, d.sh + (e.clientY - d.sy))
+    setSize({ w, h })
+    setPreset(null)
+  }
+  function onResizeUp() {
+    resizeRef.current = null
+  }
+
   function onBgDown(e: React.PointerEvent) {
     // 빈 캔버스 드래그 → 팬 (+ 선택 해제)
     svgRef.current?.setPointerCapture(e.pointerId)
@@ -232,13 +281,32 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
         <button type="button" onClick={fit} className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100">화면에 맞춤</button>
         <button type="button" onClick={() => setView({ k: 1, tx: 0, ty: 0 })} className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100">100%</button>
 
-        <span className="ml-auto text-xs text-gray-400">휠 줌 · 빈 곳 드래그로 팬 · 우하단 모서리로 캔버스 크기 조절</span>
+        <span className="mx-1 h-4 w-px bg-gray-300" />
+        <span className="text-xs text-gray-400">캔버스</span>
+        <div className="inline-flex overflow-hidden rounded-md border border-gray-300">
+          {(['small', 'medium', 'large'] as PresetKey[]).map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => applyPreset(key)}
+              className={`px-2.5 py-1 text-xs font-medium ${preset === key ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+            >
+              {PRESETS[key].label}
+            </button>
+          ))}
+        </div>
+
+        <span className="ml-auto text-xs text-gray-400">휠 줌 · 빈 곳 드래그로 팬 · 우하단 모서리로 크기 조절</span>
         <button type="button" onClick={exportPng} className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100">PNG 내보내기</button>
       </div>
 
-      {/* 캔버스 겉 크기: CSS 네이티브 resize(우하단 모서리). 세션 UI(저장 안 함).
+      {/* 캔버스 겉 크기: React 소유(프리셋/모서리 드래그). 세션 UI(저장 안 함).
           내부 좌표 변환은 getScreenCTM 기반이라 크기와 무관하게 정확. */}
-      <div className="relative h-[520px] min-h-[300px] w-full min-w-[360px] max-w-full resize overflow-hidden rounded-lg border border-gray-200 bg-white">
+      <div
+        ref={containerRef}
+        className="relative max-w-full overflow-hidden rounded-lg border border-gray-200 bg-white"
+        style={{ width: size.w, height: size.h }}
+      >
         <svg
           ref={svgRef}
           width="100%"
@@ -378,6 +446,19 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
             </div>
           </div>
         )}
+
+        {/* 우하단 모서리 리사이즈 핸들 */}
+        <div
+          onPointerDown={onResizeDown}
+          onPointerMove={onResizeMove}
+          onPointerUp={onResizeUp}
+          title="드래그해 캔버스 크기 조절"
+          className="absolute bottom-0 right-0 z-20 h-4 w-4 cursor-nwse-resize"
+          style={{
+            background:
+              'linear-gradient(135deg, transparent 0 50%, #94a3b8 50% 60%, transparent 60% 72%, #94a3b8 72% 82%, transparent 82%)',
+          }}
+        />
       </div>
     </div>
   )
