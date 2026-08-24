@@ -152,7 +152,7 @@ function TreeNode({ node, fmea }: { node: StructureNode; fmea: Fmea }) {
             onClick={() => addNode(node.id)}
             className="shrink-0 rounded border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100"
           >
-            + 자식
+            + {levelLabel(project.meta.type, node.level + 1)}
           </button>
         )}
         <button
@@ -160,7 +160,7 @@ function TreeNode({ node, fmea }: { node: StructureNode; fmea: Fmea }) {
           onClick={() => addNode(node.parentId)}
           className="shrink-0 rounded border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100"
         >
-          + 형제
+          + {levelLabel(project.meta.type, node.level)}
         </button>
         <button
           type="button"
