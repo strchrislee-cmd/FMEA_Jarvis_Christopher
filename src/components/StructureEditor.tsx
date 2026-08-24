@@ -1,21 +1,54 @@
+import { useState } from 'react'
 import type { StructureNode, FourM } from '../types/fmea'
 import type { useFmea } from '../state/useFmea'
 import { childrenOf, deletionImpact, levelLabel } from '../lib/structure'
 import { helpFor, type FieldKey } from '../lib/help'
 import FieldHelp from './FieldHelp'
+import StructureDiagram from './StructureDiagram'
 
 type Fmea = ReturnType<typeof useFmea>
+type Tab = 'tree' | 'diagram'
 const FOUR_M: FourM[] = ['Man', 'Machine', 'Material', 'Method']
 const LEVEL_KEYS: FieldKey[] = ['structL0', 'structL1', 'structL2']
 
-// Step 2: Structure Analysis — 평면 배열 + parentId 트리 편집기 (3레벨 고정)
+// Step 2: Structure Analysis — 트리 편집 / 다이어그램 탭 전환 (다이어그램은 트리에서 자동 생성)
 export default function StructureEditor({ fmea }: { fmea: Fmea }) {
+  const [tab, setTab] = useState<Tab>('tree')
+
+  return (
+    <div className="max-w-3xl">
+      {/* 탭 전환 */}
+      <div className="mb-4 inline-flex overflow-hidden rounded-md border border-gray-300">
+        {(['tree', 'diagram'] as Tab[]).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTab(t)}
+            className={`px-3 py-1.5 text-sm font-medium transition ${
+              tab === t ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+            }`}
+          >
+            {t === 'tree' ? '트리 편집' : '다이어그램'}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'diagram' ? (
+        <StructureDiagram fmea={fmea} />
+      ) : (
+        <TreeTab fmea={fmea} />
+      )}
+    </div>
+  )
+}
+
+function TreeTab({ fmea }: { fmea: Fmea }) {
   const { project } = fmea
   const roots = childrenOf(project.structure, null)
   const type = project.meta.type
 
   return (
-    <div className="max-w-3xl">
+    <>
       {/* 3레벨 + 4M 도움말 범례 (유형별로 라벨·내용이 바뀜) */}
       <div className="mb-4 space-y-1.5 rounded-md bg-gray-50 p-3">
         {LEVEL_KEYS.map((k, lv) => (
@@ -52,7 +85,7 @@ export default function StructureEditor({ fmea }: { fmea: Fmea }) {
       >
         + {levelLabel(project.meta.type, 0)} 추가
       </button>
-    </div>
+    </>
   )
 }
 
