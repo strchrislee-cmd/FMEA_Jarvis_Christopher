@@ -64,17 +64,20 @@ export interface ScaleTables {
 }
 
 // ── 6. Optimization ───────────────────────────
-// O/D 저감 조치는 원인(FC) 단위 → failureCauseId 앵커(Phase 6에서 확정).
+// O/D 저감 조치는 원인(FC) 단위 → failureCauseId 앵커.
+export type OptStatus = 'open' | 'in_progress' | 'done' // 미착수 / 진행 / 완료
 export interface OptimizationItem {
   id: string
   failureCauseId: string
-  recommendedAction: string
-  responsibility: string
-  targetDate: string
-  // 조치 후 재평가 S/O/D
-  severity: number
-  occurrence: number
-  detectability: number
+  preventiveAction: string // 예방조치
+  detectiveAction: string // 검출조치
+  responsibility: string // 담당자
+  targetDate: string // 목표일
+  status: OptStatus
+  // 조치 후 예측값. 원본 FE/FC를 덮어쓰지 않고 여기 별도 보관한다(전/후 나란히 표시).
+  severity?: number // 조치 후 S
+  occurrence?: number // 조치 후 O
+  detection?: number // 조치 후 D
 }
 
 // ── 7. Documentation ──────────────────────────

@@ -5,10 +5,12 @@ import StructureEditor from './StructureEditor'
 import FunctionEditor from './FunctionEditor'
 import FailureEditor from './FailureEditor'
 import RiskEditor from './RiskEditor'
+import OptimizationEditor from './OptimizationEditor'
+import DocumentationView from './DocumentationView'
 
 type Fmea = ReturnType<typeof useFmea>
 
-// 중앙 입력 영역: 단계별 편집기 라우팅. Step 4~7은 아직 골격(placeholder).
+// 중앙 입력 영역: 단계별 편집기 라우팅.
 export default function InputArea({ fmea }: { fmea: Fmea }) {
   const { currentStep, goPrev, goNext } = fmea
   const step = STEPS[currentStep]
@@ -31,10 +33,10 @@ export default function InputArea({ fmea }: { fmea: Fmea }) {
           <FailureEditor fmea={fmea} />
         ) : currentStep === 4 ? (
           <RiskEditor fmea={fmea} />
+        ) : currentStep === 5 ? (
+          <OptimizationEditor fmea={fmea} />
         ) : (
-          <div className="flex h-64 items-center justify-center rounded-lg border-2 border-dashed border-gray-200 text-sm text-gray-400">
-            입력 폼은 이후 Phase에서 구현됩니다.
-          </div>
+          <DocumentationView fmea={fmea} />
         )}
       </div>
 

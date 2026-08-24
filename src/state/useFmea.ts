@@ -4,6 +4,7 @@ import type {
   FmeaProject,
   FmeaType,
   FourM,
+  OptimizationItem,
   Planning,
   ProjectMeta,
 } from '../types/fmea'
@@ -185,6 +186,39 @@ export function useFmea() {
     })
   }
 
+  // ── Step 6: Optimization (failureCauseId 앵커) ──
+  function addOptimization(failureCauseId: string) {
+    setProject((p) => ({
+      ...p,
+      optimizations: [
+        ...p.optimizations,
+        {
+          id: newId(),
+          failureCauseId,
+          preventiveAction: '',
+          detectiveAction: '',
+          responsibility: '',
+          targetDate: '',
+          status: 'open',
+        },
+      ],
+    }))
+  }
+
+  function updateOptimization(id: string, patch: Partial<OptimizationItem>) {
+    setProject((p) => ({
+      ...p,
+      optimizations: p.optimizations.map((o) => (o.id === id ? { ...o, ...patch } : o)),
+    }))
+  }
+
+  function removeOptimization(id: string) {
+    setProject((p) => ({
+      ...p,
+      optimizations: p.optimizations.filter((o) => o.id !== id),
+    }))
+  }
+
   // ── 스텝 이동 ─────────────────────────────────
   function goPrev() {
     setCurrentStep((s) => Math.max(0, s - 1))
@@ -227,6 +261,9 @@ export function useFmea() {
     setScale,
     setApEntry,
     removeApEntry,
+    addOptimization,
+    updateOptimization,
+    removeOptimization,
     goPrev,
     goNext,
     goTo,

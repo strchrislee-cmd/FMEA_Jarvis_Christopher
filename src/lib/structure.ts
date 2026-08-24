@@ -11,6 +11,21 @@ export function levelLabel(type: FmeaType, level: number): string {
   return levelLabels(type)[level] ?? `Level ${level + 1}`
 }
 
+// 노드의 조상 경로를 level 슬롯(0/1/2)에 채워 반환 (Excel Structure1/2/3 컬럼용)
+export function structurePath(
+  nodes: StructureNode[],
+  nodeId: string,
+): [string, string, string] {
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+  const path: [string, string, string] = ['', '', '']
+  let cur = byId.get(nodeId)
+  while (cur) {
+    if (cur.level >= 0 && cur.level <= 2) path[cur.level] = cur.name
+    cur = cur.parentId ? byId.get(cur.parentId) : undefined
+  }
+  return path
+}
+
 // 특정 부모의 직속 자식 노드
 export function childrenOf(
   nodes: StructureNode[],
