@@ -1,13 +1,12 @@
 import { useState } from 'react'
 import type { OptStatus } from '../types/fmea'
 import type { useFmea } from '../state/useFmea'
-import { buildRiskRows, type RiskRow } from '../lib/risk'
+import { buildRiskRows, RATINGS, type RiskRow } from '../lib/risk'
 import { OPT_STATUS_LABELS, postAP, postRPN } from '../lib/optimization'
 import { helpFor, type FieldKey } from '../lib/help'
 import FieldHelp from './FieldHelp'
 
 type Fmea = ReturnType<typeof useFmea>
-const RATINGS = Array.from({ length: 10 }, (_, i) => i + 1)
 const STATUSES: OptStatus[] = ['open', 'in_progress', 'done']
 
 // Step 6: Optimization — 리스크 행에서 개선 필요 항목의 FC에 조치 추가 (전/후 나란히)

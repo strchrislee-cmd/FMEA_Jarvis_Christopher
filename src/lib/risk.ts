@@ -7,6 +7,10 @@ import type {
   FmeaProject,
 } from '../types/fmea'
 
+// 회사 척도 등급 (S&PS 넘버링): 애매한 값(3·5·7·9)을 제외한 1·2·4·6·8·10 6단계.
+// S/O/D 입력·척도표 행·AP 조합표 입력이 모두 이 단일 기준을 쓴다.
+export const RATINGS = [1, 2, 4, 6, 8, 10] as const
+
 // RPN = S × O × D (파생 계산)
 export function computeRPN(s: number, o: number, d: number): number {
   return s * o * d

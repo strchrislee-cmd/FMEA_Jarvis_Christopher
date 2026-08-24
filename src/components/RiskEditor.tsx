@@ -1,14 +1,13 @@
 import { useState } from 'react'
 import type { ApLevel, FmeaType } from '../types/fmea'
 import type { useFmea } from '../state/useFmea'
-import { buildRiskRows } from '../lib/risk'
+import { buildRiskRows, RATINGS } from '../lib/risk'
 import { helpFor, type FieldKey } from '../lib/help'
 import { dfmeaScalePreset, DFMEA_SCALE_NOTE } from '../lib/scalePreset'
 import FieldHelp from './FieldHelp'
 
 type Fmea = ReturnType<typeof useFmea>
 const DIMS = ['S', 'O', 'D'] as const
-const RATINGS = Array.from({ length: 10 }, (_, i) => i + 1)
 const AP_LEVELS: ApLevel[] = ['H', 'M', 'L']
 // 리스크 표 컬럼 도움말 범례 (라벨 → 필드키)
 const RISK_HELP: [string, FieldKey][] = [
@@ -172,7 +171,7 @@ function ScaleTableEditor({ fmea, type }: { fmea: Fmea; type: FmeaType }) {
             </tr>
           </thead>
           <tbody>
-            {RATINGS.map((rating, i) => (
+            {RATINGS.map((rating) => (
               <tr key={rating} className="border-t border-gray-100">
                 <Td>
                   <span className="font-medium text-gray-600">{rating}</span>
@@ -180,8 +179,8 @@ function ScaleTableEditor({ fmea, type }: { fmea: Fmea; type: FmeaType }) {
                 {DIMS.map((dim) => (
                   <Td key={dim}>
                     <CellInput
-                      value={table[dim][i] ?? ''}
-                      onChange={(v) => fmea.setScale(type, dim, i, v)}
+                      value={table[dim][rating - 1] ?? ''}
+                      onChange={(v) => fmea.setScale(type, dim, rating - 1, v)}
                     />
                   </Td>
                 ))}
