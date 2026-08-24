@@ -2,11 +2,21 @@ import { useState } from 'react'
 import type { ApLevel, FmeaType } from '../types/fmea'
 import type { useFmea } from '../state/useFmea'
 import { buildRiskRows } from '../lib/risk'
+import { helpFor, type FieldKey } from '../lib/help'
+import FieldHelp from './FieldHelp'
 
 type Fmea = ReturnType<typeof useFmea>
 const DIMS = ['S', 'O', 'D'] as const
 const RATINGS = Array.from({ length: 10 }, (_, i) => i + 1)
 const AP_LEVELS: ApLevel[] = ['H', 'M', 'L']
+// 리스크 표 컬럼 도움말 범례 (라벨 → 필드키)
+const RISK_HELP: [string, FieldKey][] = [
+  ['S 심각도', 'severity'],
+  ['O 발생도', 'occurrence'],
+  ['D 검출도', 'detection'],
+  ['예방관리', 'prevention'],
+  ['검출관리', 'detectionControl'],
+]
 
 // Step 5: Risk Analysis — 파생 리스크 행(S/O/D 되쓰기) + 척도표 + AP 조합표
 export default function RiskEditor({ fmea }: { fmea: Fmea }) {
@@ -20,6 +30,15 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
         <h3 className="mb-2 text-sm font-medium text-gray-700">
           리스크 행 (FE × FM × FC) — S/O/D 셀은 참조 FE·FC에 저장됩니다
         </h3>
+        {/* S/O/D · 예방/검출관리 도움말 범례 */}
+        <div className="mb-3 space-y-1.5 rounded-md bg-gray-50 p-3">
+          {RISK_HELP.map(([label, k]) => (
+            <div key={k} className="flex items-start gap-2">
+              <span className="w-20 shrink-0 text-xs font-semibold text-gray-600">{label}</span>
+              <FieldHelp k={k} />
+            </div>
+          ))}
+        </div>
         {rows.length === 0 ? (
           <p className="text-sm text-gray-400">
             Step 4에서 각 FM에 FE와 FC를 모두 추가하면 행이 자동 생성됩니다.
@@ -57,6 +76,7 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
                       <CellInput
                         value={r.fc.prevention ?? ''}
                         onChange={(v) => fmea.patchCause(r.fc.id, { prevention: v })}
+                        placeholder={helpFor('prevention').placeholder}
                       />
                     </Td>
                     <Td>
@@ -69,6 +89,7 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
                       <CellInput
                         value={r.fc.detectionControl ?? ''}
                         onChange={(v) => fmea.patchCause(r.fc.id, { detectionControl: v })}
+                        placeholder={helpFor('detectionControl').placeholder}
                       />
                     </Td>
                     <Td>
@@ -275,15 +296,18 @@ function Picker({
 function CellInput({
   value,
   onChange,
+  placeholder,
 }: {
   value: string
   onChange: (v: string) => void
+  placeholder?: string
 }) {
   return (
     <input
       type="text"
       value={value}
       onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
       className="w-full min-w-28 rounded-md border border-gray-300 px-2 py-1 text-sm outline-none focus:border-blue-500"
     />
   )

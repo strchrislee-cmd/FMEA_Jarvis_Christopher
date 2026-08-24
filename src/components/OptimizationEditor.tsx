@@ -3,6 +3,8 @@ import type { OptStatus } from '../types/fmea'
 import type { useFmea } from '../state/useFmea'
 import { buildRiskRows, type RiskRow } from '../lib/risk'
 import { OPT_STATUS_LABELS, postAP, postRPN } from '../lib/optimization'
+import { helpFor, type FieldKey } from '../lib/help'
+import FieldHelp from './FieldHelp'
 
 type Fmea = ReturnType<typeof useFmea>
 const RATINGS = Array.from({ length: 10 }, (_, i) => i + 1)
@@ -99,6 +101,22 @@ function OptPanel({ fmea, row }: { fmea: Fmea; row: RiskRow }) {
         </button>
       </div>
 
+      {/* 예방/검출 조치 · 조치후 S/O/D 도움말 범례 */}
+      <div className="mb-3 space-y-1.5 rounded-md bg-gray-50 p-2">
+        {(
+          [
+            ['예방조치', 'preventiveAction'],
+            ['검출조치', 'detectiveAction'],
+            ['조치후 S/O/D', 'postSOD'],
+          ] as [string, FieldKey][]
+        ).map(([label, k]) => (
+          <div key={k} className="flex items-start gap-2">
+            <span className="w-24 shrink-0 text-xs font-semibold text-gray-600">{label}</span>
+            <FieldHelp k={k} />
+          </div>
+        ))}
+      </div>
+
       {opts.length === 0 ? (
         <p className="text-sm text-gray-400">조치가 없습니다.</p>
       ) : (
@@ -113,12 +131,14 @@ function OptPanel({ fmea, row }: { fmea: Fmea; row: RiskRow }) {
                     <TextInput
                       value={o.preventiveAction}
                       onChange={(v) => fmea.updateOptimization(o.id, { preventiveAction: v })}
+                      placeholder={helpFor('preventiveAction').placeholder}
                     />
                   </Field>
                   <Field label="검출조치">
                     <TextInput
                       value={o.detectiveAction}
                       onChange={(v) => fmea.updateOptimization(o.id, { detectiveAction: v })}
+                      placeholder={helpFor('detectiveAction').placeholder}
                     />
                   </Field>
                   <Field label="담당자">
@@ -192,12 +212,21 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-function TextInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function TextInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+}) {
   return (
     <input
       type="text"
       value={value}
       onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
       className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm outline-none focus:border-blue-500"
     />
   )

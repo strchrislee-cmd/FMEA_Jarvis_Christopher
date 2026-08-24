@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import type { useFmea } from '../state/useFmea'
+import { helpFor, type FieldKey } from '../lib/help'
+import FieldHelp from './FieldHelp'
 
 type Fmea = ReturnType<typeof useFmea>
 
@@ -18,55 +20,55 @@ export default function StepPlanning({ fmea }: { fmea: Fmea }) {
 
   return (
     <div className="max-w-2xl space-y-5">
-      <Field label="범위 (Scope)">
+      <Field label="범위 (Scope)" helpKey="scope">
         <textarea
           value={planning.scope}
           onChange={(e) => updatePlanning({ scope: e.target.value })}
           rows={3}
           className="w-full rounded-md border border-gray-300 p-2 text-sm outline-none focus:border-blue-500"
-          placeholder="이 FMEA가 다루는 분석 범위를 기술"
+          placeholder={helpFor('scope').placeholder}
         />
       </Field>
 
       <div className="grid grid-cols-2 gap-4">
-        <Field label="In-scope (경계 내)">
+        <Field label="In-scope (경계 내)" helpKey="inScope">
           <textarea
             value={planning.inScope}
             onChange={(e) => updatePlanning({ inScope: e.target.value })}
             rows={3}
             className="w-full rounded-md border border-gray-300 p-2 text-sm outline-none focus:border-blue-500"
-            placeholder="포함되는 대상"
+            placeholder={helpFor('inScope').placeholder}
           />
         </Field>
-        <Field label="Out-of-scope (경계 외)">
+        <Field label="Out-of-scope (경계 외)" helpKey="outOfScope">
           <textarea
             value={planning.outOfScope}
             onChange={(e) => updatePlanning({ outOfScope: e.target.value })}
             rows={3}
             className="w-full rounded-md border border-gray-300 p-2 text-sm outline-none focus:border-blue-500"
-            placeholder="제외되는 대상"
+            placeholder={helpFor('outOfScope').placeholder}
           />
         </Field>
       </div>
 
-      <Field label="가정 (Assumptions)">
+      <Field label="가정 (Assumptions)" helpKey="assumptions">
         <textarea
           value={planning.assumptions}
           onChange={(e) => updatePlanning({ assumptions: e.target.value })}
           rows={3}
           className="w-full rounded-md border border-gray-300 p-2 text-sm outline-none focus:border-blue-500"
-          placeholder="분석의 전제/가정"
+          placeholder={helpFor('assumptions').placeholder}
         />
       </Field>
 
-      <Field label="팀원 (Team)">
+      <Field label="팀원 (Team)" helpKey="team">
         <div className="flex gap-2">
           <input
             type="text"
             value={memberName}
             onChange={(e) => setMemberName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && addMember()}
-            placeholder="이름 입력 후 추가"
+            placeholder={helpFor('team').placeholder}
             className="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm outline-none focus:border-blue-500"
           />
           <button
@@ -102,10 +104,21 @@ export default function StepPlanning({ fmea }: { fmea: Fmea }) {
   )
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  helpKey,
+  children,
+}: {
+  label: string
+  helpKey: FieldKey
+  children: React.ReactNode
+}) {
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium text-gray-700">{label}</label>
+      <label className="block text-sm font-medium text-gray-700">{label}</label>
+      <div className="mb-1">
+        <FieldHelp k={helpKey} />
+      </div>
       {children}
     </div>
   )

@@ -1,17 +1,39 @@
 import type { StructureNode, FourM } from '../types/fmea'
 import type { useFmea } from '../state/useFmea'
 import { childrenOf, deletionImpact, levelLabel } from '../lib/structure'
+import { helpFor, type FieldKey } from '../lib/help'
+import FieldHelp from './FieldHelp'
 
 type Fmea = ReturnType<typeof useFmea>
 const FOUR_M: FourM[] = ['Man', 'Machine', 'Material', 'Method']
+const LEVEL_KEYS: FieldKey[] = ['structL0', 'structL1', 'structL2']
 
 // Step 2: Structure Analysis — 평면 배열 + parentId 트리 편집기 (3레벨 고정)
 export default function StructureEditor({ fmea }: { fmea: Fmea }) {
   const { project } = fmea
   const roots = childrenOf(project.structure, null)
+  const type = project.meta.type
 
   return (
     <div className="max-w-3xl">
+      {/* 3레벨 + 4M 도움말 범례 (유형별로 라벨·내용이 바뀜) */}
+      <div className="mb-4 space-y-1.5 rounded-md bg-gray-50 p-3">
+        {LEVEL_KEYS.map((k, lv) => (
+          <div key={k} className="flex items-start gap-2">
+            <span className="w-24 shrink-0 text-xs font-semibold text-gray-600">
+              {levelLabel(type, lv)}
+            </span>
+            <FieldHelp k={k} type={type} />
+          </div>
+        ))}
+        {type === 'PFMEA' && (
+          <div className="flex items-start gap-2">
+            <span className="w-24 shrink-0 text-xs font-semibold text-gray-600">4M</span>
+            <FieldHelp k="fourM" type={type} />
+          </div>
+        )}
+      </div>
+
       {roots.length === 0 ? (
         <p className="mb-4 text-sm text-gray-400">
           아직 구조가 없습니다. 최상위 {levelLabel(project.meta.type, 0)}부터 추가하세요.
@@ -62,7 +84,9 @@ function TreeNode({ node, fmea }: { node: StructureNode; fmea: Fmea }) {
           type="text"
           value={node.name}
           onChange={(e) => renameNode(node.id, e.target.value)}
-          placeholder="이름"
+          placeholder={
+            helpFor(LEVEL_KEYS[node.level] ?? 'structL0', project.meta.type).placeholder
+          }
           className="flex-1 rounded-md border border-gray-300 px-2 py-1 text-sm outline-none focus:border-blue-500"
         />
         {isPfmeaWorkElement && (

@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import type { useFmea } from '../state/useFmea'
 import { levelLabel } from '../lib/structure'
+import { helpFor, type FieldKey } from '../lib/help'
+import FieldHelp from './FieldHelp'
 
 type Fmea = ReturnType<typeof useFmea>
 
@@ -25,7 +27,7 @@ export default function FailureEditor({ fmea }: { fmea: Fmea }) {
   return (
     <div className="grid max-w-5xl grid-cols-3 gap-4">
       {/* 1열: 기능 → FM */}
-      <Column title="기능 → 고장모드(FM)">
+      <Column title="기능 → 고장모드(FM)" helpKey="fm">
         <ul className="space-y-0.5">
           {project.functions.map((f) => {
             const node = project.structure.find((n) => n.id === f.structureNodeId)
@@ -71,7 +73,7 @@ export default function FailureEditor({ fmea }: { fmea: Fmea }) {
         {functionId && (
           <div className="mt-3 border-t border-gray-100 pt-3">
             <ItemAdder
-              placeholder="고장모드(FM) 추가"
+              placeholder={helpFor('fm').placeholder}
               onAdd={(t) => fmea.addFailureMode(functionId, t)}
             />
             <ul className="mt-2 space-y-1">
@@ -106,13 +108,13 @@ export default function FailureEditor({ fmea }: { fmea: Fmea }) {
       </Column>
 
       {/* 2열: FE */}
-      <Column title="영향 FE" hint="상위 레벨에 대한 영향">
+      <Column title="영향 FE" hint="상위 레벨에 대한 영향" helpKey="fe">
         {!selectedMode ? (
           <Empty text="왼쪽에서 고장모드(FM)를 선택하세요." />
         ) : (
           <>
             <ItemAdder
-              placeholder="영향(FE) 추가"
+              placeholder={helpFor('fe').placeholder}
               onAdd={(t) => fmea.addFailureEffect(selectedMode.id, t)}
             />
             <ChildList
@@ -124,13 +126,13 @@ export default function FailureEditor({ fmea }: { fmea: Fmea }) {
       </Column>
 
       {/* 3열: FC */}
-      <Column title="원인 FC" hint="하위 레벨 원인">
+      <Column title="원인 FC" hint="하위 레벨 원인" helpKey="fc">
         {!selectedMode ? (
           <Empty text="왼쪽에서 고장모드(FM)를 선택하세요." />
         ) : (
           <>
             <ItemAdder
-              placeholder="원인(FC) 추가"
+              placeholder={helpFor('fc').placeholder}
               onAdd={(t) => fmea.addFailureCause(selectedMode.id, t)}
             />
             <ChildList
@@ -147,10 +149,12 @@ export default function FailureEditor({ fmea }: { fmea: Fmea }) {
 function Column({
   title,
   hint,
+  helpKey,
   children,
 }: {
   title: string
   hint?: string
+  helpKey?: FieldKey
   children: React.ReactNode
 }) {
   return (
@@ -159,6 +163,11 @@ function Column({
         {title}
         {hint && <span className="ml-1 text-xs font-normal text-gray-400">· {hint}</span>}
       </h3>
+      {helpKey && (
+        <div className="mt-1">
+          <FieldHelp k={helpKey} />
+        </div>
+      )}
       <div className="mt-2">{children}</div>
     </div>
   )

@@ -2,6 +2,8 @@ import { useState } from 'react'
 import type { StructureNode } from '../types/fmea'
 import type { useFmea } from '../state/useFmea'
 import { childrenOf, levelLabel } from '../lib/structure'
+import { helpFor } from '../lib/help'
+import FieldHelp from './FieldHelp'
 
 type Fmea = ReturnType<typeof useFmea>
 
@@ -55,6 +57,9 @@ export default function FunctionEditor({ fmea }: { fmea: Fmea }) {
             </span>
           )}
         </h3>
+        <div className="mb-2">
+          <FieldHelp k="function" type={project.meta.type} />
+        </div>
         {!selected ? (
           <p className="text-sm text-gray-400">왼쪽에서 구조 노드를 선택하세요.</p>
         ) : (
@@ -65,7 +70,7 @@ export default function FunctionEditor({ fmea }: { fmea: Fmea }) {
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && add()}
-                placeholder="기능을 입력 후 추가"
+                placeholder={helpFor('function', project.meta.type).placeholder}
                 className="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm outline-none focus:border-blue-500"
               />
               <button
