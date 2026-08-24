@@ -47,34 +47,57 @@ export function deletionImpact(
   return { nodes: subtree.size - 1, functions }
 }
 
-// 구조 노드 cascade 삭제 헬퍼.
+// ── cascade 정리 헬퍼 (계층형, 단일 경로) ──────────
 // 평면 정규화 모델의 참조 무결성을 위해 연쇄를 따라 정리한다:
-//   structure(자신+자손) → function → failureMode → failureEffect/Cause → risk → optimization
-// (Phase 1엔 function 이후 데이터가 없어 실제로는 방어적 정리로 동작한다.)
+//   structure → function → failureMode → failureEffect/Cause → risk → optimization
+// 상위 헬퍼가 하위 헬퍼를 재사용하므로 정리 로직이 한 곳에만 존재한다
+// (직접 삭제 경로가 여러 개여도 같은 경로를 타서 고아가 생기지 않는다).
+
+// FM 집합 제거 → 딸린 FE/FC/risk/optimization까지 정리
+export function removeFailureModes(
+  project: FmeaProject,
+  modeIds: Set<string>,
+): FmeaProject {
+  const removedRisks = new Set(
+    project.risks.filter((r) => modeIds.has(r.failureModeId)).map((r) => r.id),
+  )
+  return {
+    ...project,
+    failureModes: project.failureModes.filter((m) => !modeIds.has(m.id)),
+    failureEffects: project.failureEffects.filter((e) => !modeIds.has(e.failureModeId)),
+    failureCauses: project.failureCauses.filter((c) => !modeIds.has(c.failureModeId)),
+    risks: project.risks.filter((r) => !removedRisks.has(r.id)),
+    optimizations: project.optimizations.filter((o) => !removedRisks.has(o.riskId)),
+  }
+}
+
+// function 집합 제거 → 딸린 FM 이하를 removeFailureModes로 정리
+export function removeFunctions(
+  project: FmeaProject,
+  functionIds: Set<string>,
+): FmeaProject {
+  const modeIds = new Set(
+    project.failureModes.filter((m) => functionIds.has(m.functionId)).map((m) => m.id),
+  )
+  const cleaned = removeFailureModes(project, modeIds)
+  return {
+    ...cleaned,
+    functions: cleaned.functions.filter((f) => !functionIds.has(f.id)),
+  }
+}
+
+// 구조 노드(자신+자손) 제거 → 딸린 function 이하를 removeFunctions로 정리
 export function deleteStructureNode(
   project: FmeaProject,
   nodeId: string,
 ): FmeaProject {
   const removedNodes = collectSubtreeIds(project.structure, nodeId)
-
   const removedFunctions = new Set(
     project.functions.filter((f) => removedNodes.has(f.structureNodeId)).map((f) => f.id),
   )
-  const removedModes = new Set(
-    project.failureModes.filter((m) => removedFunctions.has(m.functionId)).map((m) => m.id),
-  )
-  const removedRisks = new Set(
-    project.risks.filter((r) => removedModes.has(r.failureModeId)).map((r) => r.id),
-  )
-
+  const cleaned = removeFunctions(project, removedFunctions)
   return {
-    ...project,
-    structure: project.structure.filter((n) => !removedNodes.has(n.id)),
-    functions: project.functions.filter((f) => !removedFunctions.has(f.id)),
-    failureModes: project.failureModes.filter((m) => !removedModes.has(m.id)),
-    failureEffects: project.failureEffects.filter((e) => !removedModes.has(e.failureModeId)),
-    failureCauses: project.failureCauses.filter((c) => !removedModes.has(c.failureModeId)),
-    risks: project.risks.filter((r) => !removedRisks.has(r.id)),
-    optimizations: project.optimizations.filter((o) => !removedRisks.has(o.riskId)),
+    ...cleaned,
+    structure: cleaned.structure.filter((n) => !removedNodes.has(n.id)),
   }
 }

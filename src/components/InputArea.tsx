@@ -3,6 +3,7 @@ import type { useFmea } from '../state/useFmea'
 import StepPlanning from './StepPlanning'
 import StructureEditor from './StructureEditor'
 import FunctionEditor from './FunctionEditor'
+import FailureEditor from './FailureEditor'
 
 type Fmea = ReturnType<typeof useFmea>
 
@@ -25,6 +26,8 @@ export default function InputArea({ fmea }: { fmea: Fmea }) {
           <StructureEditor fmea={fmea} />
         ) : currentStep === 2 ? (
           <FunctionEditor fmea={fmea} />
+        ) : currentStep === 3 ? (
+          <FailureEditor fmea={fmea} />
         ) : (
           <div className="flex h-64 items-center justify-center rounded-lg border-2 border-dashed border-gray-200 text-sm text-gray-400">
             입력 폼은 이후 Phase에서 구현됩니다.

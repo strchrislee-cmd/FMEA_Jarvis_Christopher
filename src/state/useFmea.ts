@@ -8,7 +8,7 @@ import type {
 import { loadProject, saveProject, loadUi, saveUi } from '../lib/storage'
 import { STEPS } from '../lib/steps'
 import { newId } from '../lib/id'
-import { deleteStructureNode } from '../lib/structure'
+import { deleteStructureNode, removeFailureModes, removeFunctions } from '../lib/structure'
 
 // FMEA 프로젝트 1건 + UI 커서(currentStep)를 관리하고 localStorage에 자동 저장한다.
 export function useFmea() {
@@ -89,10 +89,49 @@ export function useFmea() {
     }))
   }
 
+  // 기능 삭제는 구조 삭제와 같은 연쇄 정리 경로를 탄다(딸린 FM/FE/FC 함께 제거)
   function removeFunction(id: string) {
+    setProject((p) => removeFunctions(p, new Set([id])))
+  }
+
+  // ── Step 4: Failure (FE ← FM ← FC) ────────────
+  function addFailureMode(functionId: string, text: string) {
     setProject((p) => ({
       ...p,
-      functions: p.functions.filter((f) => f.id !== id),
+      failureModes: [...p.failureModes, { id: newId(), functionId, text }],
+    }))
+  }
+
+  // FM 삭제도 같은 연쇄 정리 경로(딸린 FE/FC 함께 제거)
+  function removeFailureMode(id: string) {
+    setProject((p) => removeFailureModes(p, new Set([id])))
+  }
+
+  function addFailureEffect(failureModeId: string, text: string) {
+    setProject((p) => ({
+      ...p,
+      failureEffects: [...p.failureEffects, { id: newId(), failureModeId, text }],
+    }))
+  }
+
+  function removeFailureEffect(id: string) {
+    setProject((p) => ({
+      ...p,
+      failureEffects: p.failureEffects.filter((e) => e.id !== id),
+    }))
+  }
+
+  function addFailureCause(failureModeId: string, text: string) {
+    setProject((p) => ({
+      ...p,
+      failureCauses: [...p.failureCauses, { id: newId(), failureModeId, text }],
+    }))
+  }
+
+  function removeFailureCause(id: string) {
+    setProject((p) => ({
+      ...p,
+      failureCauses: p.failureCauses.filter((c) => c.id !== id),
     }))
   }
 
@@ -126,6 +165,12 @@ export function useFmea() {
     removeNode,
     addFunction,
     removeFunction,
+    addFailureMode,
+    removeFailureMode,
+    addFailureEffect,
+    removeFailureEffect,
+    addFailureCause,
+    removeFailureCause,
     goPrev,
     goNext,
     goTo,
