@@ -142,10 +142,17 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
   // 빈 System은 systemSlots 기준의 자리표시 박스로 그린다.
   const pad = 24
   const slots = systemSlots(project.structure)
+  const EMPTY_SYS = { w: BLOCK.w + 140, h: BLOCK.h + 60 }
+  // 빈 System 위치: layout[systemId](드래그 override) ?? systemSlots 자동 자리
+  const emptySysPos = (sysId: string): Pos =>
+    drag && drag.id === sysId
+      ? { x: drag.x, y: drag.y }
+      : project.layout[sysId] ?? { x: BLOCK.startX - pad, y: (slots[sysId]?.y ?? BLOCK.startY) - pad }
   const systemBoxes = roots.map((sys) => {
     const members = blocks.filter((b) => b.parentId === sys.id)
+    const empty = members.length === 0
     let rect: { x: number; y: number; w: number; h: number }
-    if (members.length > 0) {
+    if (!empty) {
       let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity
       for (const m of members) {
         const p = posOf(m.id)
@@ -154,10 +161,10 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
       }
       rect = { x: x1 - pad, y: y1 - pad, w: x2 - x1 + pad * 2, h: y2 - y1 + pad * 2 }
     } else {
-      const y = slots[sys.id]?.y ?? BLOCK.startY
-      rect = { x: BLOCK.startX - pad, y: y - pad, w: BLOCK.w + 140, h: BLOCK.h + 60 }
+      const pos = emptySysPos(sys.id)
+      rect = { x: pos.x, y: pos.y, w: EMPTY_SYS.w, h: EMPTY_SYS.h }
     }
-    return { id: sys.id, name: sys.name || '(이름 없음)', ...rect }
+    return { id: sys.id, name: sys.name || '(이름 없음)', empty, ...rect }
   })
 
   // 전체 콘텐츠 경계(PNG 내보내기·라벨 여유 포함)
@@ -187,6 +194,24 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
     if (!selSystem) return
     const id = fmea.addNode(selSystem)
     setEditing(id)
+  }
+
+  // 이름 재편집(이름 텍스트 더블클릭). 블록 본체 더블클릭은 향후 드릴인용으로 비워둔다.
+  function startEdit(e: React.PointerEvent | React.MouseEvent, id: string) {
+    e.stopPropagation()
+    setEditing(id)
+  }
+
+  // 빈 System 단독 드래그(위치는 layout[systemId] 위성 필드에 저장).
+  function startSystemDrag(e: React.PointerEvent, sysId: string) {
+    e.stopPropagation()
+    svgRef.current?.setPointerCapture(e.pointerId)
+    const p = toContent(e)
+    const cur = emptySysPos(sysId)
+    setSelSystem(sysId)
+    setSelBlock(null)
+    setSelIface(null)
+    setDrag({ id: sysId, dx: p.x - cur.x, dy: p.y - cur.y, x: cur.x, y: cur.y })
   }
 
   function startDrag(e: React.PointerEvent, node: StructureNode) {
@@ -381,11 +406,19 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
           </defs>
 
           <g ref={gRef} id="diagram-content" transform={`translate(${view.tx} ${view.ty}) scale(${view.k})`}>
-            {/* System(level 0) 그룹 박스 — 소속 Subsystem을 감싼다. 클릭하면 선택 */}
+            {/* System(level 0) 그룹 박스 — 소속 Subsystem을 감싼다.
+                빈 System은 단독 드래그, 비어있지 않으면 클릭 선택. 이름은 우측 정렬. */}
             {systemBoxes.map((box) => {
               const sel = box.id === selSystem
+              const headColor = sel ? '#2563eb' : '#64748b'
               return (
-                <g key={box.id} style={{ cursor: 'pointer' }} onPointerDown={(e) => selectSystem(e, box.id)}>
+                <g
+                  key={box.id}
+                  style={{ cursor: box.empty ? 'move' : 'pointer' }}
+                  onPointerDown={(e) =>
+                    box.empty ? startSystemDrag(e, box.id) : selectSystem(e, box.id)
+                  }
+                >
                   <rect
                     x={box.x}
                     y={box.y}
@@ -397,15 +430,32 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
                     strokeWidth={sel ? 2.4 : 1.4}
                     strokeDasharray="3 4"
                   />
+                  {/* 헤더: 왼쪽 레벨 라벨 */}
                   <text
                     x={box.x + 12}
                     y={box.y - 8}
                     fontFamily="ui-monospace, monospace"
                     fontSize={12}
                     fontWeight={600}
-                    fill={sel ? '#2563eb' : '#64748b'}
+                    fill={headColor}
                   >
-                    {box.name} · {levelLabel(type, 0)}
+                    {levelLabel(type, 0)}
+                  </text>
+                  {/* 헤더: 오른쪽 이름(우측 정렬) — 더블클릭으로 이름 편집.
+                      pointerDown은 전파만 막아 그룹 드래그/캡처를 피한다(캡처 시 dblclick이 삼켜짐). */}
+                  <text
+                    x={box.x + box.w - 12}
+                    y={box.y - 8}
+                    textAnchor="end"
+                    fontFamily="var(--font-ui, sans-serif)"
+                    fontSize={12}
+                    fontWeight={600}
+                    fill={sel ? '#2563eb' : '#334155'}
+                    style={{ cursor: 'text' }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onDoubleClick={(e) => startEdit(e, box.id)}
+                  >
+                    {box.name}
                   </text>
                 </g>
               )
@@ -449,7 +499,19 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
                     <rect x={p.x - 4} y={p.y - 4} width={BLOCK.w + 8} height={BLOCK.h + 8} rx={11} fill="none" stroke="#2563eb" strokeWidth={2.2} />
                   )}
                   <rect x={p.x} y={p.y} width={BLOCK.w} height={BLOCK.h} rx={9} fill="#ffffff" stroke="#94a3b8" strokeWidth={1.4} style={{ cursor: 'move' }} onPointerDown={(e) => startDrag(e, n)} />
-                  <text x={p.x + 14} y={p.y + 27} fontFamily="sans-serif" fontSize={14} fontWeight={600} fill="#111827" style={{ pointerEvents: 'none' }}>
+                  {/* 이름 텍스트: 더블클릭으로 이름 편집(본체 더블클릭은 향후 드릴인용).
+                      pointerDown은 전파만 막아 팬/캡처를 피한다(캡처 시 dblclick이 삼켜짐). 드래그는 본체로. */}
+                  <text
+                    x={p.x + 14}
+                    y={p.y + 27}
+                    fontFamily="sans-serif"
+                    fontSize={14}
+                    fontWeight={600}
+                    fill="#111827"
+                    style={{ cursor: 'text' }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onDoubleClick={(e) => startEdit(e, n.id)}
+                  >
                     {truncate(n.name || '(이름 없음)')}
                   </text>
                   <text x={p.x + 14} y={p.y + 46} fontFamily="ui-monospace, monospace" fontSize={10} fill="#94a3b8" style={{ pointerEvents: 'none' }}>
