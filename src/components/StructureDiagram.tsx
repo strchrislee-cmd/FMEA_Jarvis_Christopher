@@ -13,11 +13,6 @@ const KIND_COLOR: Record<InterfaceKind, string> = {
   전원: '#b45309',
   기계: '#7c3aed',
 }
-const HEIGHTS: [string, number][] = [
-  ['작게', 420],
-  ['보통', 520],
-  ['크게', 720],
-]
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v))
 
 function border(cx: number, cy: number, w: number, h: number, tx: number, ty: number): Pos {
@@ -44,7 +39,6 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
   const [selIface, setSelIface] = useState<string | null>(null)
   const [selBlock, setSelBlock] = useState<string | null>(null)
   const [view, setView] = useState<View>({ k: 1, tx: 0, ty: 0 })
-  const [canvasH, setCanvasH] = useState(520)
 
   const blocks = project.structure.filter((n) => n.level === 1)
   const roots = project.structure.filter((n) => n.level === 0)
@@ -216,26 +210,13 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
         <button type="button" onClick={fit} className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100">화면에 맞춤</button>
         <button type="button" onClick={() => setView({ k: 1, tx: 0, ty: 0 })} className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100">100%</button>
 
-        <span className="mx-1 h-4 w-px bg-gray-300" />
-        <span className="text-xs text-gray-400">캔버스</span>
-        <div className="inline-flex overflow-hidden rounded-md border border-gray-300">
-          {HEIGHTS.map(([label, h]) => (
-            <button
-              key={h}
-              type="button"
-              onClick={() => setCanvasH(h)}
-              className={`px-2.5 py-1 text-xs font-medium ${canvasH === h ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <span className="ml-auto text-xs text-gray-400">휠 줌 · 빈 곳 드래그로 팬</span>
+        <span className="ml-auto text-xs text-gray-400">휠 줌 · 빈 곳 드래그로 팬 · 우하단 모서리로 캔버스 크기 조절</span>
         <button type="button" onClick={exportPng} className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100">PNG 내보내기</button>
       </div>
 
-      <div className="relative overflow-hidden rounded-lg border border-gray-200 bg-white" style={{ height: canvasH }}>
+      {/* 캔버스 겉 크기: CSS 네이티브 resize(우하단 모서리). 세션 UI(저장 안 함).
+          내부 좌표 변환은 getScreenCTM 기반이라 크기와 무관하게 정확. */}
+      <div className="relative h-[520px] min-h-[300px] w-full min-w-[360px] max-w-full resize overflow-hidden rounded-lg border border-gray-200 bg-white">
         <svg
           ref={svgRef}
           width="100%"
