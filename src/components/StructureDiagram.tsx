@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import type { InterfaceKind, StructureNode } from '../types/fmea'
 import type { useFmea } from '../state/useFmea'
 import { newId } from '../lib/id'
-import { BLOCK, blockPositions, type Pos } from '../lib/diagram'
+import { levelLabel } from '../lib/structure'
+import { BLOCK, blockPositions, systemSlots, type Pos } from '../lib/diagram'
 
 type Fmea = ReturnType<typeof useFmea>
 type View = { k: number; tx: number; ty: number }
@@ -48,6 +49,8 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
   const [pan, setPan] = useState<{ x0: number; y0: number; tx0: number; ty0: number } | null>(null)
   const [selIface, setSelIface] = useState<string | null>(null)
   const [selBlock, setSelBlock] = useState<string | null>(null)
+  const [selSystem, setSelSystem] = useState<string | null>(null)
+  const [editing, setEditing] = useState<string | null>(null) // 인라인 이름 편집 중인 노드 id
   const [view, setView] = useState<View>({ k: 1, tx: 0, ty: 0 })
   // 캔버스 겉 크기(px) — React가 소유. 프리셋 또는 모서리 드래그로 변경.
   const containerRef = useRef<HTMLDivElement>(null)
@@ -135,34 +138,27 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
     setView({ k, tx, ty })
   }
 
-  if (blocks.length === 0) {
-    return (
-      <p className="text-sm text-gray-400">
-        블록이 없습니다. “트리 편집”에서 최상위 아래에 Subsystem(2레벨) 노드를 추가하면
-        다이어그램에 자동 배치됩니다.
-      </p>
-    )
-  }
-
-  // System(level 0)별 그룹 박스 = 소속 Subsystem 블록들을 감싸는 계산된 경계(저장 안 함).
+  // System(level 0)별 그룹 박스 = 소속 Subsystem을 감싸는 계산된 경계(저장 안 함).
+  // 빈 System은 systemSlots 기준의 자리표시 박스로 그린다.
   const pad = 24
-  const systemBoxes = roots
-    .map((sys) => {
-      const members = blocks.filter((b) => b.parentId === sys.id)
-      if (members.length === 0) return null
+  const slots = systemSlots(project.structure)
+  const systemBoxes = roots.map((sys) => {
+    const members = blocks.filter((b) => b.parentId === sys.id)
+    let rect: { x: number; y: number; w: number; h: number }
+    if (members.length > 0) {
       let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity
       for (const m of members) {
         const p = posOf(m.id)
         x1 = Math.min(x1, p.x); y1 = Math.min(y1, p.y)
         x2 = Math.max(x2, p.x + BLOCK.w); y2 = Math.max(y2, p.y + BLOCK.h)
       }
-      return {
-        id: sys.id,
-        name: sys.name || '(이름 없음)',
-        x: x1 - pad, y: y1 - pad, w: x2 - x1 + pad * 2, h: y2 - y1 + pad * 2,
-      }
-    })
-    .filter((b): b is NonNullable<typeof b> => b !== null)
+      rect = { x: x1 - pad, y: y1 - pad, w: x2 - x1 + pad * 2, h: y2 - y1 + pad * 2 }
+    } else {
+      const y = slots[sys.id]?.y ?? BLOCK.startY
+      rect = { x: BLOCK.startX - pad, y: y - pad, w: BLOCK.w + 140, h: BLOCK.h + 60 }
+    }
+    return { id: sys.id, name: sys.name || '(이름 없음)', ...rect }
+  })
 
   // 전체 콘텐츠 경계(PNG 내보내기·라벨 여유 포함)
   let cx1 = Infinity, cy1 = Infinity, cx2 = -Infinity, cy2 = -Infinity
@@ -175,7 +171,23 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
     cx1 = Math.min(cx1, p.x); cy1 = Math.min(cy1, p.y)
     cx2 = Math.max(cx2, p.x + BLOCK.w); cy2 = Math.max(cy2, p.y + BLOCK.h)
   }
+  if (!isFinite(cx1)) { cx1 = 0; cy1 = 0; cx2 = 400; cy2 = 200 } // 빈 구조 방어
   const contentBounds = { x: cx1, y: cy1, w: cx2 - cx1, h: cy2 - cy1 }
+
+  const type = project.meta.type
+
+  function addSystem() {
+    const id = fmea.addNode(null)
+    setSelSystem(id)
+    setSelBlock(null)
+    setSelIface(null)
+    setEditing(id)
+  }
+  function addSubsystem() {
+    if (!selSystem) return
+    const id = fmea.addNode(selSystem)
+    setEditing(id)
+  }
 
   function startDrag(e: React.PointerEvent, node: StructureNode) {
     e.stopPropagation()
@@ -184,6 +196,7 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
     const b = posOf(node.id)
     setSelBlock(node.id)
     setSelIface(null)
+    setSelSystem(null)
     setDrag({ id: node.id, dx: p.x - b.x, dy: p.y - b.y, x: b.x, y: b.y })
   }
 
@@ -230,7 +243,15 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
     svgRef.current?.setPointerCapture(e.pointerId)
     setSelBlock(null)
     setSelIface(null)
+    setSelSystem(null)
     setPan({ x0: e.clientX, y0: e.clientY, tx0: view.tx, ty0: view.ty })
+  }
+
+  function selectSystem(e: React.PointerEvent, id: string) {
+    e.stopPropagation()
+    setSelSystem(id)
+    setSelBlock(null)
+    setSelIface(null)
   }
 
   function onMove(e: React.PointerEvent) {
@@ -269,10 +290,45 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
   const iface = project.interfaces.find((i) => i.id === selIface) ?? null
   const ifaceMid = iface ? midpoint(center(iface.fromNodeId), center(iface.toNodeId)) : null
 
+  // 인라인 이름 편집 위치(줌/팬 반영해 화면 좌표로)
+  const editNode = editing ? project.structure.find((n) => n.id === editing) ?? null : null
+  let editScreen: Pos | null = null
+  if (editNode) {
+    let cxp = BLOCK.startX + 10
+    let cyp = BLOCK.startY + 8
+    if (editNode.level === 1) {
+      const p = base[editNode.id]
+      if (p) { cxp = p.x + 10; cyp = p.y + 8 }
+    } else {
+      const bx = systemBoxes.find((b) => b.id === editNode.id)
+      if (bx) { cxp = bx.x + 12; cyp = bx.y + 8 }
+    }
+    editScreen = { x: view.tx + cxp * view.k, y: view.ty + cyp * view.k }
+  }
+
   return (
     <div className="max-w-full">
       {/* 툴바 */}
       <div className="mb-2 flex flex-wrap items-center gap-2">
+        {/* 노드 생성 (기존 트리 추가 로직 재사용) */}
+        <button
+          type="button"
+          onClick={addSystem}
+          className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
+        >
+          + {levelLabel(type, 0)}
+        </button>
+        <button
+          type="button"
+          onClick={addSubsystem}
+          disabled={!selSystem}
+          title={selSystem ? undefined : `${levelLabel(type, 0)}을(를) 선택하면 추가할 수 있습니다`}
+          className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          + {levelLabel(type, 1)}
+        </button>
+        <span className="mx-1 h-4 w-px bg-gray-300" />
+
         <div className="inline-flex overflow-hidden rounded-md border border-gray-300">
           <button type="button" onClick={() => zoomBy(1 / 1.2)} className="px-2.5 py-1 text-sm text-gray-700 hover:bg-gray-100" aria-label="축소">−</button>
           <span className="border-x border-gray-300 px-2 py-1 text-xs tabular-nums text-gray-600">{Math.round(view.k * 100)}%</span>
@@ -325,15 +381,35 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
           </defs>
 
           <g ref={gRef} id="diagram-content" transform={`translate(${view.tx} ${view.ty}) scale(${view.k})`}>
-            {/* System(level 0) 그룹 박스 — 소속 Subsystem을 감싼다 */}
-            {systemBoxes.map((box) => (
-              <g key={box.id}>
-                <rect x={box.x} y={box.y} width={box.w} height={box.h} rx={12} fill="#f8fafc" stroke="#94a3b8" strokeWidth={1.4} strokeDasharray="3 4" />
-                <text x={box.x + 12} y={box.y - 8} fontFamily="ui-monospace, monospace" fontSize={12} fontWeight={600} fill="#64748b">
-                  {box.name} · System
-                </text>
-              </g>
-            ))}
+            {/* System(level 0) 그룹 박스 — 소속 Subsystem을 감싼다. 클릭하면 선택 */}
+            {systemBoxes.map((box) => {
+              const sel = box.id === selSystem
+              return (
+                <g key={box.id} style={{ cursor: 'pointer' }} onPointerDown={(e) => selectSystem(e, box.id)}>
+                  <rect
+                    x={box.x}
+                    y={box.y}
+                    width={box.w}
+                    height={box.h}
+                    rx={12}
+                    fill="#f8fafc"
+                    stroke={sel ? '#2563eb' : '#94a3b8'}
+                    strokeWidth={sel ? 2.4 : 1.4}
+                    strokeDasharray="3 4"
+                  />
+                  <text
+                    x={box.x + 12}
+                    y={box.y - 8}
+                    fontFamily="ui-monospace, monospace"
+                    fontSize={12}
+                    fontWeight={600}
+                    fill={sel ? '#2563eb' : '#64748b'}
+                  >
+                    {box.name} · {levelLabel(type, 0)}
+                  </text>
+                </g>
+              )
+            })}
 
             {/* 인터페이스 연결선 */}
             {project.interfaces.map((it) => {
@@ -447,6 +523,22 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
           </div>
         )}
 
+        {/* 생성 직후 인라인 이름 편집 */}
+        {editNode && editScreen && (
+          <input
+            autoFocus
+            value={editNode.name}
+            onChange={(e) => fmea.renameNode(editNode.id, e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === 'Escape') setEditing(null)
+            }}
+            onBlur={() => setEditing(null)}
+            placeholder={`${levelLabel(type, editNode.level)} 이름`}
+            className="absolute z-30 rounded-md border border-blue-500 px-2 py-1 text-sm shadow outline-none"
+            style={{ left: editScreen.x, top: editScreen.y, width: 168 }}
+          />
+        )}
+
         {/* 우하단 모서리 리사이즈 핸들 */}
         <div
           onPointerDown={onResizeDown}
@@ -467,6 +559,7 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
     e.stopPropagation()
     setSelIface(id)
     setSelBlock(null)
+    setSelSystem(null)
   }
 
   // 줌/팬과 무관하게 전체 다이어그램을 원래 해상도로 내보낸다.

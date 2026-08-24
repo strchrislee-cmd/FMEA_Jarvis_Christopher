@@ -15,8 +15,27 @@ export const BLOCK = {
 
 export type Pos = { x: number; y: number }
 
-// 좌표 없는 블록의 자동배치. System(level 0)별로 소속 Subsystem을 묶어 세로로 쌓는다.
-// System 그룹 박스는 렌더 시 소속 블록에서 계산하므로 여기선 블록 좌표만 반환한다.
+// System(level 0)별 세로 슬롯(소속 Subsystem 배치가 시작되는 y). System 배치의 단일 출처 —
+// 자동배치와 (빈 System의) 그룹 박스 위치가 같은 기준을 쓴다.
+export interface SystemSlot {
+  y: number
+  empty: boolean
+  endY: number
+}
+export function systemSlots(nodes: StructureNode[]): Record<string, SystemSlot> {
+  const slots: Record<string, SystemSlot> = {}
+  let cursorY = BLOCK.startY
+  for (const sys of nodes.filter((n) => n.level === 0)) {
+    const kids = nodes.filter((n) => n.level === 1 && n.parentId === sys.id)
+    const rows = Math.max(1, Math.ceil(kids.length / BLOCK.cols))
+    const endY = cursorY + rows * (BLOCK.h + BLOCK.rowGap) + BLOCK.sysGap
+    slots[sys.id] = { y: cursorY, empty: kids.length === 0, endY }
+    cursorY = endY
+  }
+  return slots
+}
+
+// 좌표 없는 블록의 자동배치. System별 슬롯 y를 기준으로 소속 Subsystem을 그리드 배치.
 export function autoBlockPositions(nodes: StructureNode[]): Record<string, Pos> {
   const pos: Record<string, Pos> = {}
   const place = (n: StructureNode, i: number, baseY: number) => {
@@ -28,18 +47,17 @@ export function autoBlockPositions(nodes: StructureNode[]): Record<string, Pos> 
     }
   }
 
-  let cursorY = BLOCK.startY
-  const systems = nodes.filter((n) => n.level === 0)
-  for (const sys of systems) {
+  const slots = systemSlots(nodes)
+  let maxEnd = BLOCK.startY
+  for (const sys of nodes.filter((n) => n.level === 0)) {
     const kids = nodes.filter((n) => n.level === 1 && n.parentId === sys.id)
-    kids.forEach((n, i) => place(n, i, cursorY))
-    const rows = Math.max(1, Math.ceil(kids.length / BLOCK.cols))
-    cursorY += rows * (BLOCK.h + BLOCK.rowGap) + BLOCK.sysGap
+    kids.forEach((n, i) => place(n, i, slots[sys.id].y))
+    maxEnd = Math.max(maxEnd, slots[sys.id].endY)
   }
 
-  // 소속 System이 없는 Subsystem(방어적): 그룹 없이 아래에 배치
+  // 소속 System이 없는 Subsystem(방어적): 그룹 아래에 배치
   const orphans = nodes.filter((n) => n.level === 1 && !(n.id in pos))
-  orphans.forEach((n, i) => place(n, i, cursorY))
+  orphans.forEach((n, i) => place(n, i, maxEnd))
   return pos
 }
 

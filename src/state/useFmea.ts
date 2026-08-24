@@ -67,14 +67,16 @@ export function useFmea() {
 
   // ── Step 2: Structure ─────────────────────────
   // parentId=null 이면 루트(level 0). 자식은 부모 level+1 (최대 2).
-  function addNode(parentId: string | null) {
+  // 생성한 노드의 id를 반환한다(다이어그램에서 생성 직후 인라인 편집에 사용).
+  function addNode(parentId: string | null): string {
+    const id = newId()
     setProject((p) => {
       const parent = parentId ? p.structure.find((n) => n.id === parentId) : null
       const level = parent ? parent.level + 1 : 0
       if (level > 2) return p
-      const node = { id: newId(), parentId, name: '', level }
-      return { ...p, structure: [...p.structure, node] }
+      return { ...p, structure: [...p.structure, { id, parentId, name: '', level }] }
     })
+    return id
   }
 
   function renameNode(id: string, name: string) {
