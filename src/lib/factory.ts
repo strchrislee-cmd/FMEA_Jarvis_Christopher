@@ -1,6 +1,25 @@
-import type { FailureCause, FailureMode, FmeaProject, ScaleTable, ScaleTables } from '../types/fmea'
+import type { ApLevel, FailureCause, FailureMode, FmeaProject, ScaleTable, ScaleTables } from '../types/fmea'
 import { dfmeaScalePreset } from './scalePreset'
 import { allPdItemIds } from './pdiagram'
+
+// AP 조합표 방어: 신형 {ap,label} 또는 구버전 문자열("H") 모두 수용.
+// 문자열이면 label 없이 등급만. 등급이 H/M/L이 아니면 항목 제외(임의 라벨 생성 금지).
+function normalizeApTable(raw: Record<string, unknown>): FmeaProject['apTable'] {
+  const valid = new Set(['H', 'M', 'L'])
+  const out: FmeaProject['apTable'] = {}
+  for (const [k, v] of Object.entries(raw)) {
+    if (typeof v === 'string') {
+      if (valid.has(v)) out[k] = { ap: v as ApLevel }
+    } else if (v && typeof v === 'object') {
+      const ap = (v as { ap?: unknown }).ap
+      const label = (v as { label?: unknown }).label
+      if (typeof ap === 'string' && valid.has(ap)) {
+        out[k] = typeof label === 'string' && label ? { ap: ap as ApLevel, label } : { ap: ap as ApLevel }
+      }
+    }
+  }
+  return out
+}
 
 function emptyScaleTable(): ScaleTable {
   // 등급 1~10, 기본값은 빈칸 (사용자가 사내 기준으로 채움)
@@ -84,7 +103,7 @@ export function normalizeProject(raw: unknown): FmeaProject {
       DFMEA: mergeScale(scales.DFMEA),
       PFMEA: mergeScale(scales.PFMEA),
     },
-    apTable: obj(p.apTable) as FmeaProject['apTable'],
+    apTable: normalizeApTable(obj(p.apTable)),
     documentation: { ...base.documentation, ...obj(p.documentation) } as FmeaProject['documentation'],
     interfaces: arr(p.interfaces),
     layout: obj(p.layout) as FmeaProject['layout'],

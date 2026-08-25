@@ -262,9 +262,10 @@ export function useFmea() {
     })
   }
 
-  // AP 조합표: (S,O,D)→레벨 항목 추가/삭제
-  function setApEntry(s: number, o: number, d: number, level: ApLevel) {
-    setProject((p) => ({ ...p, apTable: { ...p.apTable, [apKey(s, o, d)]: level } }))
+  // AP 조합표: (S,O,D)→{등급, 사유 라벨(선택)} 항목 추가/수정. 라벨 없으면 등급만.
+  function setApEntry(s: number, o: number, d: number, level: ApLevel, label?: string) {
+    const entry = label && label.trim() ? { ap: level, label: label.trim() } : { ap: level }
+    setProject((p) => ({ ...p, apTable: { ...p.apTable, [apKey(s, o, d)]: entry } }))
   }
 
   function removeApEntry(key: string) {

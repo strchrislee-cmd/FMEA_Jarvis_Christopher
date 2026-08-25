@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
-import type { ApLevel, FmeaType } from '../types/fmea'
+import type { ApEntry, ApLevel, FmeaType } from '../types/fmea'
 import type { useFmea } from '../state/useFmea'
-import { buildRiskRows, isSafetyRow, RATINGS, rpnBand, type RpnBand } from '../lib/risk'
+import { buildRiskRows, isSafetyRow, lookupAp, RATINGS, rpnBand, type RpnBand } from '../lib/risk'
 import { getPDiagram } from '../lib/pdiagram'
 import { companyApPreset } from '../lib/apPreset'
 import { helpFor, RPN_HINT, SOD_LABELS, type FieldKey } from '../lib/help'
@@ -33,6 +33,9 @@ const BAND_STYLE: Record<RpnBand, { cls: string; label: string }> = {
   mid: { cls: 'bg-orange-100 text-orange-800', label: '중간' },
   high: { cls: 'bg-red-100 text-red-800', label: '높음' },
 }
+// AP 등급 → 한국어·조치수준(사내 규칙: H=조치 필수 / M=조치 권고 / L=조치 선택).
+const AP_KO: Record<ApLevel, string> = { H: '높음', M: '중간', L: '낮음' }
+const AP_ACTION: Record<ApLevel, string> = { H: '조치 필수', M: '조치 권고', L: '조치 선택' }
 
 // Step 5: Risk Analysis — 파생 리스크 행(S/O/D 되쓰기) + 척도표 + AP 조합표
 export default function RiskEditor({ fmea }: { fmea: Fmea }) {
@@ -185,13 +188,7 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
                       )}
                     </Td>
                     <Td>
-                      {r.rpn == null ? (
-                        <span className="text-gray-300">—</span>
-                      ) : r.ap ? (
-                        <span className="font-medium">{r.ap}</span>
-                      ) : (
-                        <span className="text-amber-600">미설정</span>
-                      )}
+                      <ApCell entry={r.rpn == null ? undefined : lookupAp(project.apTable, r.s!, r.o!, r.d!)} rpn={r.rpn} />
                     </Td>
                   </tr>
                   )
@@ -213,12 +210,26 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
       {/* AP 조합표 편집 */}
       <ApTableEditor fmea={fmea} />
 
-      {/* 등급 선택 설명 토스트(약 2초, 자동 사라짐) */}
+      {/* 등급 선택 설명 토스트(약 2초, 자동 사라짐). 세로화면 스크롤바 높이(우측 중앙)에 표시. */}
       {toast && (
-        <div className="pointer-events-none fixed bottom-6 left-1/2 z-50 max-w-md -translate-x-1/2 rounded-lg bg-gray-900/95 px-4 py-2 text-sm text-white shadow-lg">
+        <div className="pointer-events-none fixed right-6 top-1/2 z-50 max-w-xs -translate-y-1/2 rounded-lg bg-gray-900/95 px-4 py-2 text-sm text-white shadow-lg">
           {toast}
         </div>
       )}
+    </div>
+  )
+}
+
+// AP 셀: 등급 + 조치수준 + (있으면) 사유 라벨. 라벨은 표에서 읽은 값만 — 없으면 등급만.
+function ApCell({ entry, rpn }: { entry: ApEntry | undefined; rpn: number | undefined }) {
+  if (rpn == null) return <span className="text-gray-300">—</span>
+  if (!entry) return <span className="text-amber-600">미설정</span>
+  return (
+    <div className="leading-tight">
+      <div className="font-medium whitespace-nowrap">
+        {entry.ap} ({AP_KO[entry.ap]}) · {AP_ACTION[entry.ap]}
+      </div>
+      {entry.label && <div className="mt-0.5 text-[11px] text-gray-500">{entry.label}</div>}
     </div>
   )
 }
@@ -293,11 +304,22 @@ function ApTableEditor({ fmea }: { fmea: Fmea }) {
   const [o, setO] = useState(1)
   const [d, setD] = useState(1)
   const [level, setLevel] = useState<ApLevel>('H')
+  const [label, setLabel] = useState('') // 사유 라벨(선택 입력)
 
   function loadApPreset() {
     if (entries.length > 0 && !window.confirm('현재 AP 조합표를 사내 기본값으로 덮어씁니다. 계속할까요?'))
       return
     fmea.setApTable(companyApPreset())
+  }
+
+  // 기존 항목을 폼으로 불러와 등급·라벨 편집(라벨은 선택 입력).
+  function editEntry(key: string, entry: ApEntry) {
+    const [ks, ko, kd] = key.split('-').map(Number)
+    setS(ks)
+    setO(ko)
+    setD(kd)
+    setLevel(entry.ap)
+    setLabel(entry.label ?? '')
   }
 
   return (
@@ -340,25 +362,44 @@ function ApTableEditor({ fmea }: { fmea: Fmea }) {
             ))}
           </select>
         </label>
+        <label className="text-xs text-gray-500">
+          사유 라벨(선택)
+          <input
+            type="text"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="예: 안전·법규 / 검출 취약"
+            className="ml-1 w-56 rounded-md border border-gray-300 px-2 py-1 text-sm"
+          />
+        </label>
         <button
           type="button"
-          onClick={() => fmea.setApEntry(s, o, d, level)}
+          onClick={() => fmea.setApEntry(s, o, d, level, label)}
           className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
         >
           항목 추가/수정
         </button>
       </div>
+      <p className="mt-1 text-xs text-gray-400">칩을 클릭하면 폼으로 불러와 등급·라벨을 수정할 수 있습니다.</p>
 
       {entries.length > 0 && (
-        <ul className="mt-3 flex flex-wrap gap-2">
+        <ul className="mt-2 flex flex-wrap gap-2">
           {entries
             .sort((a, b) => a[0].localeCompare(b[0]))
-            .map(([key, lv]) => (
+            .map(([key, entry]) => (
               <li
                 key={key}
                 className="flex items-center gap-2 rounded-full bg-gray-100 py-1 pl-3 pr-1 text-sm"
               >
-                <code>{key}</code> → {lv}
+                <button
+                  type="button"
+                  onClick={() => editEntry(key, entry)}
+                  className="flex items-center gap-1 rounded-full hover:text-blue-600"
+                  title="클릭해 편집"
+                >
+                  <code>{key}</code> → <span className="font-medium">{entry.ap}</span>
+                  {entry.label && <span className="text-xs text-gray-500">· {entry.label}</span>}
+                </button>
                 <button
                   type="button"
                   onClick={() => fmea.removeApEntry(key)}

@@ -55,7 +55,12 @@ export interface FailureCause {
 // ── 5. Risk Analysis ──────────────────────────
 // S/O/D는 FE/FC에 저장하고, 행(FE×FM×FC)·RPN·AP는 파생 계산한다(single source of truth).
 // 척도표(scales)와 AP 조합표(apTable)는 편집 가능한 config로 프로젝트에 저장한다.
-export type ApTable = Record<string, ApLevel> // key = "s-o-d" (예: "7-3-4")
+// AP 조합표 항목: 등급 + 선택적 사유 라벨. label은 표에서 읽은 값만 표시(앱이 지어내지 않음).
+export interface ApEntry {
+  ap: ApLevel
+  label?: string
+}
+export type ApTable = Record<string, ApEntry> // key = "s-o-d" (예: "7-3-4")
 export interface ScaleTable {
   S: string[] // index i = 등급 (i+1) 의 설명, 길이 10
   O: string[]

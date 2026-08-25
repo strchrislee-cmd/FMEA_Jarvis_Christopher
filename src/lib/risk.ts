@@ -1,4 +1,5 @@
 import type {
+  ApEntry,
   ApLevel,
   ApTable,
   FailureCause,
@@ -32,16 +33,23 @@ export function apKey(s: number, o: number, d: number): string {
   return `${s}-${o}-${d}`
 }
 
-// AP는 (S,O,D) 조합표 룩업으로만 계산한다.
+// AP 조합표 룩업(등급+사유 라벨). 레거시 문자열 값도 관용적으로 읽는다(label 없이 등급만).
+// 키가 없으면 undefined(미설정) — 임의 값/라벨을 추측하지 않는다.
+export function lookupAp(apTable: ApTable, s: number, o: number, d: number): ApEntry | undefined {
+  const v = apTable[apKey(s, o, d)] as ApEntry | ApLevel | undefined
+  if (v == null) return undefined
+  return typeof v === 'string' ? { ap: v } : v
+}
+
+// AP는 (S,O,D) 조합표 룩업으로만 계산한다(등급만 반환).
 // 주의: AIAG-VDA AP는 S×O×D 곱의 구간(예: RPN>100=H)이 아니라 세 값 조합에 대한 테이블이다.
-// 키가 없으면 undefined(미설정) — 임의 값을 추측하지 않는다.
 export function computeAP(
   s: number,
   o: number,
   d: number,
   apTable: ApTable,
 ): ApLevel | undefined {
-  return apTable[apKey(s, o, d)]
+  return lookupAp(apTable, s, o, d)?.ap
 }
 
 // 파생 리스크 행: 워크시트 한 행 = (FE × FM × FC) 조합.
