@@ -1,14 +1,16 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { ApLevel, FmeaType } from '../types/fmea'
 import type { useFmea } from '../state/useFmea'
-import { buildRiskRows, RATINGS } from '../lib/risk'
+import { buildRiskRows, isSafetyRow, RATINGS, rpnBand, type RpnBand } from '../lib/risk'
 import { getPDiagram } from '../lib/pdiagram'
-import { helpFor, type FieldKey } from '../lib/help'
+import { companyApPreset } from '../lib/apPreset'
+import { helpFor, RPN_HINT, SOD_LABELS, type FieldKey } from '../lib/help'
 import { dfmeaScalePreset, DFMEA_SCALE_NOTE } from '../lib/scalePreset'
 import FieldHelp from './FieldHelp'
 import PdImportSelect from './PdImportSelect'
 
 type Fmea = ReturnType<typeof useFmea>
+type ScaleDim = 'S' | 'O' | 'D'
 
 // FM이 속한 구조 노드의 Control Factor 목록(prevention 가져오기용).
 function controlsForFm(project: Fmea['project'], functionId: string) {
@@ -17,27 +19,51 @@ function controlsForFm(project: Fmea['project'], functionId: string) {
 }
 const DIMS = ['S', 'O', 'D'] as const
 const AP_LEVELS: ApLevel[] = ['H', 'M', 'L']
-// 리스크 표 컬럼 도움말 범례 (라벨 → 필드키)
+// 리스크 표 컬럼 도움말 범례 (라벨 → 필드키). S/O/D는 중앙 라벨 맵 재사용.
 const RISK_HELP: [string, FieldKey][] = [
-  ['S 심각도', 'severity'],
-  ['O 발생도', 'occurrence'],
-  ['D 검출도', 'detection'],
+  [SOD_LABELS.S, 'severity'],
+  [SOD_LABELS.O, 'occurrence'],
+  [SOD_LABELS.D, 'detection'],
   ['예방관리', 'prevention'],
   ['검출관리', 'detectionControl'],
 ]
+// RPN 구간 → 색상 클래스·라벨(색상만으로 정보 전달 금지: 값+라벨 병행).
+const BAND_STYLE: Record<RpnBand, { cls: string; label: string }> = {
+  low: { cls: 'bg-green-100 text-green-800', label: '낮음' },
+  mid: { cls: 'bg-orange-100 text-orange-800', label: '중간' },
+  high: { cls: 'bg-red-100 text-red-800', label: '높음' },
+}
 
 // Step 5: Risk Analysis — 파생 리스크 행(S/O/D 되쓰기) + 척도표 + AP 조합표
 export default function RiskEditor({ fmea }: { fmea: Fmea }) {
   const { project } = fmea
   const rows = buildRiskRows(project)
+  const apEmpty = Object.keys(project.apTable).length === 0
+
+  // 등급 선택 시 척도표 문구를 약 2초 토스트로 표시(연속 선택 시 교체). 문구는 scales에서만 읽는다.
+  const [toast, setToast] = useState<string | null>(null)
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  function showScaleToast(dim: ScaleDim, value: number) {
+    const text = project.scales[project.meta.type][dim][value - 1]?.trim()
+    setToast(`${SOD_LABELS[dim]} ${value} — ${text || '기준 미정의'}`)
+    clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(null), 2000)
+  }
 
   return (
     <div className="max-w-6xl space-y-8">
       {/* 리스크 행 테이블 */}
       <section>
-        <h3 className="mb-2 text-sm font-medium text-gray-700">
+        <h3 className="mb-1 text-sm font-medium text-gray-700">
           리스크 행 (FE × FM × FC) — S/O/D 셀은 참조 FE·FC에 저장됩니다
         </h3>
+        <p className="mb-2 text-xs text-gray-400">{RPN_HINT}</p>
+        {/* AP 모드인데 조합표가 비어 있으면 안내 */}
+        {project.meta.riskMethod === 'AP' && apEmpty && (
+          <p className="mb-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
+            AP 조합표가 설정되지 않았습니다 — 척도표 화면에서 불러오거나 RPN 모드를 사용하세요.
+          </p>
+        )}
         {/* S/O/D · 예방/검출관리 도움말 범례 */}
         <div className="mb-3 space-y-1.5 rounded-md bg-gray-50 p-3">
           {RISK_HELP.map(([label, k]) => (
@@ -58,25 +84,45 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
                 <tr>
                   <Th>고장모드 FM</Th>
                   <Th>영향 FE</Th>
-                  <Th>S</Th>
+                  <Th>{SOD_LABELS.S}</Th>
                   <Th>원인 FC</Th>
                   <Th>예방관리</Th>
-                  <Th>O</Th>
+                  <Th>{SOD_LABELS.O}</Th>
                   <Th>검출관리</Th>
-                  <Th>D</Th>
-                  <Th>RPN</Th>
+                  <Th>{SOD_LABELS.D}</Th>
+                  <Th>
+                    <span title={RPN_HINT}>RPN ⓘ</span>
+                  </Th>
                   <Th>AP</Th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
-                  <tr key={`${r.fe.id}-${r.fm.id}-${r.fc.id}`} className="border-t border-gray-100">
-                    <Td>{r.fm.text}</Td>
+                {rows.map((r) => {
+                  const safety = isSafetyRow(r.s)
+                  return (
+                  <tr
+                    key={`${r.fe.id}-${r.fm.id}-${r.fc.id}`}
+                    className={`border-t border-gray-100 ${safety ? 'bg-rose-50' : ''}`}
+                  >
+                    <Td>
+                      {safety && (
+                        <span
+                          title={`안전/법규 관련(S=${r.s}) — RPN과 무관하게 우선 검토`}
+                          className="mr-1 inline-flex items-center rounded bg-rose-600 px-1 py-0.5 text-[10px] font-bold text-white"
+                        >
+                          ⚠ 안전
+                        </span>
+                      )}
+                      {r.fm.text}
+                    </Td>
                     <Td>{r.fe.text}</Td>
                     <Td>
                       <RatingSelect
                         value={r.s}
-                        onChange={(v) => fmea.setEffectSeverity(r.fe.id, v)}
+                        onChange={(v) => {
+                          fmea.setEffectSeverity(r.fe.id, v)
+                          if (v) showScaleToast('S', v)
+                        }}
                       />
                     </Td>
                     <Td>{r.fc.text}</Td>
@@ -105,7 +151,10 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
                     <Td>
                       <RatingSelect
                         value={r.o}
-                        onChange={(v) => fmea.patchCause(r.fc.id, { occurrence: v })}
+                        onChange={(v) => {
+                          fmea.patchCause(r.fc.id, { occurrence: v })
+                          if (v) showScaleToast('O', v)
+                        }}
                       />
                     </Td>
                     <Td>
@@ -118,11 +167,22 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
                     <Td>
                       <RatingSelect
                         value={r.d}
-                        onChange={(v) => fmea.patchCause(r.fc.id, { detection: v })}
+                        onChange={(v) => {
+                          fmea.patchCause(r.fc.id, { detection: v })
+                          if (v) showScaleToast('D', v)
+                        }}
                       />
                     </Td>
                     <Td>
-                      <span className="font-medium">{r.rpn ?? '—'}</span>
+                      {r.rpn == null ? (
+                        <span className="text-gray-300">—</span>
+                      ) : (
+                        <span
+                          className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-medium ${BAND_STYLE[rpnBand(r.rpn)].cls}`}
+                        >
+                          {r.rpn} · {BAND_STYLE[rpnBand(r.rpn)].label}
+                        </span>
+                      )}
                     </Td>
                     <Td>
                       {r.rpn == null ? (
@@ -134,12 +194,13 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
                       )}
                     </Td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
         )}
-        {project.meta.riskMethod === 'AP' && (
+        {project.meta.riskMethod === 'AP' && !apEmpty && (
           <p className="mt-1 text-xs text-gray-400">
             AP가 “미설정”이면 아래 AP 조합표에 해당 (S,O,D) 항목이 없는 것입니다.
           </p>
@@ -151,6 +212,13 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
 
       {/* AP 조합표 편집 */}
       <ApTableEditor fmea={fmea} />
+
+      {/* 등급 선택 설명 토스트(약 2초, 자동 사라짐) */}
+      {toast && (
+        <div className="pointer-events-none fixed bottom-6 left-1/2 z-50 max-w-md -translate-x-1/2 rounded-lg bg-gray-900/95 px-4 py-2 text-sm text-white shadow-lg">
+          {toast}
+        </div>
+      )}
     </div>
   )
 }
@@ -188,9 +256,9 @@ function ScaleTableEditor({ fmea, type }: { fmea: Fmea; type: FmeaType }) {
           <thead className="bg-gray-50 text-xs text-gray-500">
             <tr>
               <Th>등급</Th>
-              <Th>S 심각도</Th>
-              <Th>O 발생도</Th>
-              <Th>D 검출도</Th>
+              <Th>{SOD_LABELS.S}</Th>
+              <Th>{SOD_LABELS.O}</Th>
+              <Th>{SOD_LABELS.D}</Th>
             </tr>
           </thead>
           <tbody>
@@ -226,13 +294,33 @@ function ApTableEditor({ fmea }: { fmea: Fmea }) {
   const [d, setD] = useState(1)
   const [level, setLevel] = useState<ApLevel>('H')
 
+  function loadApPreset() {
+    if (entries.length > 0 && !window.confirm('현재 AP 조합표를 사내 기본값으로 덮어씁니다. 계속할까요?'))
+      return
+    fmea.setApTable(companyApPreset())
+  }
+
   return (
     <section>
-      <h3 className="mb-1 text-sm font-medium text-gray-700">AP 조합표</h3>
+      <div className="mb-1 flex items-center justify-between">
+        <h3 className="text-sm font-medium text-gray-700">
+          AP 조합표{' '}
+          <span className="ml-1 text-xs font-normal text-gray-400">
+            (등록된 조합 {entries.length}개)
+          </span>
+        </h3>
+        <button
+          type="button"
+          onClick={loadApPreset}
+          className="rounded-md border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
+        >
+          사내 기본값 불러오기
+        </button>
+      </div>
       <p className="mb-2 text-xs text-gray-400">
         AP는 (S,O,D) 조합 룩업입니다(RPN 구간 아님). 룩업 키 포맷:{' '}
         <code className="rounded bg-gray-100 px-1">"s-o-d"</code> (예: S7·O3·D4 → "7-3-4").
-        JSON 불러오기로 사내 AP표를 통째로 주입할 수 있습니다.
+        “사내 기본값 불러오기” 후에도 개별 조합을 계속 편집할 수 있습니다.
       </p>
       <div className="flex flex-wrap items-end gap-2">
         <Picker label="S" value={s} onChange={setS} />

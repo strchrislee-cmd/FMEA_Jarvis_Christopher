@@ -72,7 +72,9 @@ DFMEA/PFMEA를 AIAG-VDA 7단계로 안내하고, 각 단계에서 예시를 보�
 - **Phase 4 (Step 6·7 + Excel)**: Optimization(전/후 나란히, 조치후값 별도보관) / Documentation(요약+내보내기) / **Excel(xlsx-js-style 고정, 시트=표지/FMEA/척도표, 1행=FE×FM×FC, 단일 조치는 숫자셀·다건만 "; " 병합, 헤더 굵게+열너비만).**
 - **단일 HTML 빌드**: `dist/index.html` 하나로 인라인(file:// 실행). vite-plugin-singlefile은 Vite8/rolldown 충돌 → 커스텀 플러그인.
 - **가이드/도움말**: `lib/help.ts`(필드키→{oneLiner,placeholder,detail(좋은/나쁜 예)}) + `<FieldHelp>`(? 팝오버). Step 1 세트 예시(LED 헤드램프 계열) + "예시 채우기".
-- **회사 척도 반영**: DFMEA 척도표에 사내 프리셋(`lib/scalePreset.ts`), **등급 1·2·4·6·8·10만 사용(3·5·7·9 제거)**. "회사 기본값 불러오기" 버튼 + Note 각주. **PFMEA 척도표는 빈칸(공정관리 기준 별도), AP표는 미설정(비어 있음) — 사내 AP표 JSON 주입 예정.**
+- **회사 척도 반영**: DFMEA 척도표에 사내 프리셋(`lib/scalePreset.ts`), **등급 1·2·4·6·8·10만 사용(3·5·7·9 제거)**. "회사 기본값 불러오기" 버튼 + Note 각주. **PFMEA 척도표는 빈칸(공정관리 기준 별도).**
+- **AP 조합표 사내 프리셋**(`lib/apPreset.ts` `companyApPreset()`): 회사 척도 10/8/6/4/1의 **125조합 전수**를 코드에 임베드(외부 파일 불필요). AP 편집 화면 "사내 기본값 불러오기"로 주입, 이후 개별 편집 가능. `computeAP`는 여전히 순수 "S-O-D" 룩업(RPN 구간 매핑 금지), 미등록 조합은 "미설정". 특성: S=10 조합 25개에 L 없음. **주의: 규칙안이며 품질팀 확정 전 — `10-4-1`은 첨부표대로 M(과제 예시의 H와 상충, 미해결).**
+- **Step 5 리스크 화면 개선**: S/O/D 한국어 병기(중앙 라벨 맵 `help.ts` `SOD_LABELS`/`RPN_HINT` 재사용) · RPN 색상 구간(≤100 녹/101~200 주황/≥201 적, **값+라벨 병행**=색약 대응, `risk.ts` `rpnBand`) · **S=9·10 안전행은 RPN 무관 ⚠강조**(`isSafetyRow`) · 등급 선택 시 척도표 문구 2초 토스트(scales에서만 읽고 없으면 "기준 미정의") · AP 빈 표 안내 + 등록 조합 수 표시.
 - **Phase A (Step 2 블록다이어그램 편집기, 순수 SVG)**:
   - 블록 = 구조 노드 재사용(새 엔티티 없음). **interfaces[]** 추가(노드 id 쌍, kind만; category N/C/X는 P-Diagram으로). **layout** 위성 좌표.
   - System(level0) **그룹 박스**(소속 Subsystem을 감싸는 계산 경계, 저장 안 함). 헤더=[좌 레벨라벨][우 이름]. 빈 System도 단독 드래그(layout[systemId]).

@@ -275,6 +275,11 @@ export function useFmea() {
     })
   }
 
+  // AP 조합표 전체 교체(사내 기본값 프리셋 불러오기 등). 이후에도 항목별 편집 가능.
+  function setApTable(table: FmeaProject['apTable']) {
+    setProject((p) => ({ ...p, apTable: table }))
+  }
+
   // ── Step 6: Optimization (failureCauseId 앵커) ──
   function addOptimization(failureCauseId: string) {
     setProject((p) => ({
@@ -351,6 +356,7 @@ export function useFmea() {
     setScaleTable,
     setApEntry,
     removeApEntry,
+    setApTable,
     setNodePosition,
     addInterface,
     updateInterface,

@@ -1,5 +1,12 @@
 import type { FmeaType } from '../types/fmea'
 
+// S/O/D 한국어 병기 라벨(컬럼 헤더·척도표·토스트에서 재사용 — 하드코딩 분산 금지).
+export const SOD_LABELS = { S: 'S(심각도)', O: 'O(발생도)', D: 'D(검출도)' } as const
+export const SOD_FULL = { S: '심각도', O: '발생도', D: '검출도' } as const
+// RPN 약자 안내.
+export const RPN_LABEL = 'RPN'
+export const RPN_HINT = 'RPN = Risk Priority Number(위험 우선순위 지수) = S×O×D'
+
 // 필드별 도움말을 한 곳에 모은다. (핸드북 원문 복붙 금지 — 자체 문장)
 // detail에는 좋은 예/나쁜 예를 최소 한 쌍 + 흔한 실수를 담는다.
 export interface HelpDetail {

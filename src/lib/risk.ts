@@ -16,6 +16,17 @@ export function computeRPN(s: number, o: number, d: number): number {
   return s * o * d
 }
 
+// RPN 색상 구간(값·라벨 병행용, 색상만으로 정보 전달 금지): ≤100 낮음 / 101~200 중간 / ≥201 높음
+export type RpnBand = 'low' | 'mid' | 'high'
+export function rpnBand(rpn: number): RpnBand {
+  return rpn <= 100 ? 'low' : rpn <= 200 ? 'mid' : 'high'
+}
+
+// 안전/법규 행: S가 9·10이면 RPN과 무관하게 별도 강조(곱 특성상 낮은 RPN에 묻히지 않도록).
+export function isSafetyRow(s: number | undefined): boolean {
+  return s === 9 || s === 10
+}
+
 // AP 조합표 룩업 키. 포맷: "s-o-d" (예: computeAP(7,3,4) → "7-3-4")
 export function apKey(s: number, o: number, d: number): string {
   return `${s}-${o}-${d}`
