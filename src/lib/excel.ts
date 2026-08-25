@@ -2,7 +2,8 @@ import * as XLSX from 'xlsx-js-style'
 import type { FmeaProject } from '../types/fmea'
 import { buildRiskRows, isSafetyRow, rpnBand } from './risk'
 import { mergeOptimizations, optimizationsForCause } from './optimization'
-import { levelLabels, structurePath } from './structure'
+import { levelLabels, levelLabelsBilingual, structurePath } from './structure'
+import { SOD_LABELS } from './help'
 
 // ── 서식 헬퍼 (xlsx-js-style) ─────────────────────────────
 // 데이터·컬럼 구성·값은 그대로 두고 셀 스타일만 입힌다.
@@ -60,7 +61,7 @@ const HEADER_FILL = ['FFD9E1F2', 'FFFCE4E4', 'FFE2EFDA', 'FFFDF2D9'] // 구조·
 function headerFill(c: number): string {
   return c <= 3 ? HEADER_FILL[0] : c <= 7 ? HEADER_FILL[1] : c <= 13 ? HEADER_FILL[2] : HEADER_FILL[3]
 }
-const MAIN_WIDTHS = [16, 16, 16, 26, 30, 5, 30, 30, 26, 5, 26, 5, 8, 7, 26, 26, 10, 12, 9, 8, 8, 8, 11, 10]
+const MAIN_WIDTHS = [16, 16, 16, 26, 30, 7, 30, 30, 26, 7, 26, 7, 12, 12, 26, 26, 10, 12, 9, 10, 10, 10, 13, 13]
 
 interface RowMeta {
   s?: number
@@ -71,11 +72,15 @@ interface RowMeta {
 }
 
 function buildMainSheet(project: FmeaProject): XLSX.WorkSheet {
+  // 헤더 라벨은 한국어 병기(값·컬럼 구성·순서는 불변). 구조 라벨은 유형별 레벨 맵 재사용,
+  // S/O/D는 화면의 SOD_LABELS 재사용(중복 정의 없음).
+  const lv = levelLabelsBilingual(project.meta.type)
   const header = [
-    'Structure1', 'Structure2', 'Structure3', 'Function',
-    'FE', 'S', 'FM', 'FC', '예방관리', 'O', '검출관리', 'D', 'RPN', 'AP',
+    lv[0], lv[1], lv[2], 'Function',
+    '고장영향(FE)', SOD_LABELS.S, '고장모드(FM)', '고장원인(FC)',
+    '예방관리', SOD_LABELS.O, '검출관리', SOD_LABELS.D, 'RPN(위험우선순위)', 'AP(조치우선순위)',
     '조치(예방)', '조치(검출)', '담당', '목표일', '상태',
-    '조치후 S', '조치후 O', '조치후 D', '조치후 RPN', '조치후 AP',
+    `조치후 ${SOD_LABELS.S}`, `조치후 ${SOD_LABELS.O}`, `조치후 ${SOD_LABELS.D}`, '조치후 RPN(위험우선순위)', '조치후 AP(조치우선순위)',
   ]
   const rows = buildRiskRows(project)
   const data: (string | number)[][] = [header]
@@ -102,7 +107,7 @@ function buildMainSheet(project: FmeaProject): XLSX.WorkSheet {
 
   const ws = XLSX.utils.aoa_to_sheet(data)
   ws['!cols'] = MAIN_WIDTHS.map((wch) => ({ wch }))
-  ws['!rows'] = rowHeights(data, MAIN_WIDTHS)
+  ws['!rows'] = rowHeights(data, MAIN_WIDTHS, 32) // 병기 헤더 2줄 여유
   // 헤더 필터(정렬/필터 가능) — freeze pane은 이 라이브러리 라이터가 미지원.
   ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: data.length - 1, c: header.length - 1 } }) }
 
@@ -149,11 +154,20 @@ function buildMainSheet(project: FmeaProject): XLSX.WorkSheet {
 // ── 척도표 시트 ───────────────────────────────────────────
 function buildScaleSheet(project: FmeaProject): XLSX.WorkSheet {
   const t = project.scales[project.meta.type]
-  const header = ['등급', 'S 심각도', 'O 발생도', 'D 검출도']
-  const data: (string | number)[][] = [header]
+  const header = ['등급', SOD_LABELS.S, SOD_LABELS.O, SOD_LABELS.D]
+  // 기준 문구가 하나도 없는 등급 행은 출력하지 않는다(빈 행이 절반이면 판독 저해).
+  // S/O/D 중 하나라도 문구가 있으면 출력. 임의 문구 생성 없음 — 비면 비운 채.
+  const gradeRows: (string | number)[][] = []
+  let omitted = 0
   for (let i = 0; i < 10; i++) {
-    data.push([i + 1, t.S[i] ?? '', t.O[i] ?? '', t.D[i] ?? ''])
+    const has = (t.S[i] ?? '').trim() || (t.O[i] ?? '').trim() || (t.D[i] ?? '').trim()
+    if (has) gradeRows.push([i + 1, t.S[i] ?? '', t.O[i] ?? '', t.D[i] ?? ''])
+    else omitted++
   }
+  const data: (string | number)[][] = [header, ...gradeRows]
+  const gradeEnd = data.length // 등급 행 끝(각주 제외)
+  if (omitted > 0) data.push(['그 외 등급은 기준 미정의', '', '', ''])
+
   const widths = [6, 46, 46, 46]
   const ws = XLSX.utils.aoa_to_sheet(data)
   ws['!cols'] = widths.map((wch) => ({ wch }))
@@ -166,12 +180,21 @@ function buildScaleSheet(project: FmeaProject): XLSX.WorkSheet {
       alignment: { vertical: 'center', horizontal: 'center', wrapText: true },
       border: borderOf(),
     })
-    for (let r = 1; r < data.length; r++) {
+    for (let r = 1; r < gradeEnd; r++) {
       put(ws, r, c, {
         alignment: { vertical: 'center', horizontal: c === 0 ? 'center' : 'left', wrapText: true },
         border: borderOf(),
       })
     }
+  }
+  // 각주 한 줄(A:D 병합, 회색 이탤릭) — 비어있는 등급을 대체.
+  if (omitted > 0) {
+    const fr = gradeEnd
+    ws['!merges'] = [{ s: { r: fr, c: 0 }, e: { r: fr, c: 3 } }]
+    put(ws, fr, 0, {
+      font: { italic: true, color: { rgb: 'FF808080' } },
+      alignment: { vertical: 'center', horizontal: 'left', wrapText: true },
+    })
   }
   return ws
 }

@@ -11,6 +11,17 @@ export function levelLabel(type: FmeaType, level: number): string {
   return levelLabels(type)[level] ?? `Level ${level + 1}`
 }
 
+// 문서(Excel 등)용 레벨 라벨: 영문은 levelLabels 재사용, 한국어 병기만 여기서 얹는다.
+const LEVEL_KO: Record<FmeaType, [string, string, string]> = {
+  DFMEA: ['시스템', '서브시스템', '부품'],
+  PFMEA: ['공정', '공정단계', '작업요소'],
+}
+export function levelLabelsBilingual(type: FmeaType): [string, string, string] {
+  const en = levelLabels(type)
+  const ko = LEVEL_KO[type]
+  return [`${en[0]}(${ko[0]})`, `${en[1]}(${ko[1]})`, `${en[2]}(${ko[2]})`]
+}
+
 // 노드의 조상 경로를 level 슬롯(0/1/2)에 채워 반환 (Excel Structure1/2/3 컬럼용)
 export function structurePath(
   nodes: StructureNode[],
