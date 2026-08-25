@@ -100,6 +100,33 @@ export interface Interface {
 // 노드 id로 키하며, 좌표 없는 노드는 자동배치로 폴백한다.
 export type Layout = Record<string, { x: number; y: number }>
 
+// ── P-Diagram (Parameter Diagram, 블록 단위) ──
+// 5방향(입력신호/제어인자/잡음인자/이상출력/오류상태)을 구조 노드(Subsystem·Component)에 1:1로 붙인다.
+// 항목은 {id,text} 객체 — Phase B에서 errorState→FM, control→예방관리, noise→FC 를
+// 연결할 때 안정적 id가 필요(텍스트 매칭은 오타·문구수정에 취약).
+export type NoiseCategory =
+  | 'piece' // 부품 편차 (piece-to-piece)
+  | 'wear' // 시간 경과·열화 (change over time)
+  | 'usage' // 사용 조건 (customer usage)
+  | 'environment' // 사용 환경 (external environment)
+  | 'interaction' // 시스템 상호작용 (system interaction)
+export interface PdItem {
+  id: string
+  text: string
+}
+export interface NoiseItem extends PdItem {
+  category: NoiseCategory
+}
+export interface PDiagram {
+  id: string
+  structureNodeId: string // 1:1로 붙는 구조 노드
+  inputs: PdItem[] // 입력 신호 (Input Signal)
+  controls: PdItem[] // 제어 인자 (Control Factor)
+  noises: NoiseItem[] // 잡음 인자 (Noise Factor, 5분류)
+  outputs: PdItem[] // 이상 출력 (Ideal Output)
+  errorStates: PdItem[] // 오류 상태 (Error State)
+}
+
 // ── 1. Planning & Preparation ─────────────────
 // 헤더 성격의 메타(제목/유형/방식)와 계획 내용(범위/경계/가정/팀)을 나눈다.
 export interface ProjectMeta {
@@ -137,4 +164,5 @@ export interface FmeaProject {
   documentation: Documentation
   interfaces: Interface[] // 블록 간 인터페이스(평면+id)
   layout: Layout // 블록 배치 좌표(위성, 별도 섹션) — 도메인 배열과 독립
+  pDiagrams: PDiagram[] // 블록 단위 P-Diagram(평면+id, structureNodeId로 노드 참조)
 }

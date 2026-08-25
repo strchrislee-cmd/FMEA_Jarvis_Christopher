@@ -4,6 +4,8 @@ import type { useFmea } from '../state/useFmea'
 import { newId } from '../lib/id'
 import { levelLabel } from '../lib/structure'
 import { BLOCK, blockPositions, systemSlots, type Pos } from '../lib/diagram'
+import { getPDiagram, hasPDiagramContent } from '../lib/pdiagram'
+import PDiagramPanel from './PDiagramPanel'
 
 type Fmea = ReturnType<typeof useFmea>
 type View = { k: number; tx: number; ty: number }
@@ -64,6 +66,8 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
   const lastClick = useRef<{ id: string; t: number } | null>(null)
   // 드릴인: 진입한 Subsystem id(세션 UI, 저장 안 함). null이면 최상위.
   const [drillInto, setDrillInto] = useState<string | null>(null)
+  // 선택 블록의 P-Diagram 사이드 패널 열림 여부(세션 UI, 저장 안 함).
+  const [showPd, setShowPd] = useState(false)
 
   // 진입한 Subsystem이 사라졌으면(삭제 등) 최상위로 강제 복귀
   const drillParent = drillInto ? project.structure.find((n) => n.id === drillInto) ?? null : null
@@ -433,6 +437,20 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
             </button>
           </>
         )}
+        {/* 선택 블록의 P-Diagram 편집 토글(컨텍스트 버튼) */}
+        {selBlock && (
+          <button
+            type="button"
+            onClick={() => setShowPd((v) => !v)}
+            className={`rounded-md border px-2.5 py-1 text-xs font-medium ${
+              showPd
+                ? 'border-blue-600 bg-blue-600 text-white'
+                : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+            }`}
+          >
+            P-Diagram
+          </button>
+        )}
         <span className="mx-1 h-4 w-px bg-gray-300" />
 
         <div className="inline-flex overflow-hidden rounded-md border border-gray-300">
@@ -464,11 +482,12 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
         <button type="button" onClick={exportPng} className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100">PNG 내보내기</button>
       </div>
 
+      <div className="flex max-w-full items-stretch gap-3">
       {/* 캔버스 겉 크기: React 소유(프리셋/모서리 드래그). 세션 UI(저장 안 함).
           내부 좌표 변환은 getScreenCTM 기반이라 크기와 무관하게 정확. */}
       <div
         ref={containerRef}
-        className="relative max-w-full overflow-hidden rounded-lg border border-gray-200 bg-white"
+        className="relative overflow-hidden rounded-lg border border-gray-200 bg-white"
         style={{ width: size.w, height: size.h }}
       >
         <svg
@@ -580,6 +599,8 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
               const childCount = inDrill
                 ? 0
                 : project.structure.filter((c) => c.parentId === n.id).length
+              // P-Diagram 보유 표시(불리언 칩) — C 배지의 반대쪽 코너.
+              const pdHas = hasPDiagramContent(getPDiagram(project, n.id))
               return (
                 <g key={n.id}>
                   {sel && (
@@ -621,6 +642,15 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
                       <rect x={p.x + BLOCK.w - 42} y={p.y + 8} width={34} height={16} rx={8} fill="#eff6ff" stroke="#bfdbfe" />
                       <text x={p.x + BLOCK.w - 25} y={p.y + 20} textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize={10} fontWeight={600} fill="#2563eb">
                         C {childCount}
+                      </text>
+                    </g>
+                  )}
+                  {/* P-Diagram 보유 칩(불리언) — 우하단 코너 */}
+                  {pdHas && (
+                    <g style={{ pointerEvents: 'none' }}>
+                      <rect x={p.x + BLOCK.w - 26} y={p.y + BLOCK.h - 22} width={18} height={16} rx={8} fill="#fef3c7" stroke="#fcd34d" />
+                      <text x={p.x + BLOCK.w - 17} y={p.y + BLOCK.h - 10} textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize={10} fontWeight={700} fill="#b45309">
+                        P
                       </text>
                     </g>
                   )}
@@ -720,6 +750,12 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
               'linear-gradient(135deg, transparent 0 50%, #94a3b8 50% 60%, transparent 60% 72%, #94a3b8 72% 82%, transparent 82%)',
           }}
         />
+      </div>
+
+      {/* P-Diagram 사이드 패널 — 선택 블록(Subsystem·Component) 대상 */}
+      {selBlock && showPd && (
+        <PDiagramPanel fmea={fmea} nodeId={selBlock} onClose={() => setShowPd(false)} />
+      )}
       </div>
     </div>
   )

@@ -121,7 +121,7 @@ export function deleteStructureNode(
     project.functions.filter((f) => removedNodes.has(f.structureNodeId)).map((f) => f.id),
   )
   const cleaned = removeFunctions(project, removedFunctions)
-  // 같은 삭제 경로에서 노드에 앵커된 인터페이스와 배치 좌표도 정리(고아 방지)
+  // 같은 삭제 경로에서 노드에 앵커된 인터페이스·배치 좌표·P-Diagram도 정리(고아 방지)
   const layout = { ...cleaned.layout }
   for (const id of removedNodes) delete layout[id]
   return {
@@ -131,5 +131,6 @@ export function deleteStructureNode(
       (i) => !removedNodes.has(i.fromNodeId) && !removedNodes.has(i.toNodeId),
     ),
     layout,
+    pDiagrams: cleaned.pDiagrams.filter((pd) => !removedNodes.has(pd.structureNodeId)),
   }
 }

@@ -59,6 +59,7 @@ DFMEA/PFMEA를 AIAG-VDA 7단계로 안내하고, 각 단계에서 예시를 보�
 - `documentation{ summary }`
 - `interfaces[]{ id, fromNodeId, toNodeId, label, kind: 신호|전원|기계 }`  (블록 간, 노드 id 쌍)
 - `layout: Record<nodeId,{x,y}>`  (블록 배치 좌표 위성, export 별도 섹션)
+- `pDiagrams[]{ id, structureNodeId, inputs[], controls[], noises[], outputs[], errorStates[] }`  (블록 단위 P-Diagram; 항목 `{id,text}`, noise `{id,text,category}`)
 - 파생 유틸: `lib/risk.ts`(computeRPN/apKey/computeAP/buildRiskRows, `RATINGS=[1,2,4,6,8,10]`), `lib/optimization.ts`(postRPN/AP·mergeOptimizations), `lib/diagram.ts`(autoBlockPositions/systemSlots/childBlockPositions/blockPositions), `lib/excel.ts`(SheetJS xlsx-js-style@1.2.0 고정).
 - UI 상태(currentStep 등)는 `fmea:ui:v1`(localStorage 별도 키). 도메인은 `fmea:project:v1`. 줌/팬/캔버스 크기/드릴 상태는 **저장 안 함(세션 UI)**.
 - `normalizeProject`(lib/factory.ts): 구버전/누락 필드 방어 로드(흰 화면 방지, 구버전 risks[] 등 무시).
@@ -79,16 +80,10 @@ DFMEA/PFMEA를 AIAG-VDA 7단계로 안내하고, 각 단계에서 예시를 보�
   - 캔버스: 프리셋(작게/보통/크게, 가로+세로) + 우하단 모서리 리사이즈(React 소유), 줌(+/−/휠/맞춤/100%)·팬. **모두 세션 UI, 저장 안 함.** PNG 내보내기(줌 무관 전체, 프레임 기하로 결정적).
   - Step 2 다이어그램 모드에선 가이드 패널 숨겨 폭 확보(다른 스텝 폭 불변).
   - **Component 드릴인**: Subsystem 본체 더블클릭 → 내부 진입(`drillInto` 세션 UI, 단일값, 저장 안 함). 그 Subsystem의 Component를 블록으로 편집(생성/이름/드래그/**같은 부모 내 Component↔Component 연결**, 컨텍스트 필터 렌더). "← 상위로"+브레드크럼. 최상위 Subsystem에 **Component 개수 배지 `C n`** + 진입 힌트. PNG 파일명에 컨텍스트 반영. 본체 더블클릭=드릴(포인터 캡처가 native dblclick 삼켜 타이밍 판정), 이름 텍스트=편집.
+- **Phase A-2 (P-Diagram, 블록 단위)** — `types`에 `pDiagrams[]{ id, structureNodeId, inputs[], controls[], noises[], outputs[], errorStates[] }`. 항목=**`{id,text}`**(안정 id로 Phase B 연결), noise=**`{id,text,category}`**. 정식 5방향(Input Signal/Control Factor/Ideal Output/Error State + Noise Factor **5분류 서브섹션**: 부품편차/시간경과·열화/사용조건/사용환경/시스템상호작용). **부착 = 선택 블록(Subsystem·Component), System 제외**, 노드당 1:1 지연 생성. UI = **우측 사이드 패널**(`PDiagramPanel.tsx`), 블록 선택 시 툴바 "P-Diagram" 컨텍스트 토글로 열기. 보유 표시 = **불리언 "P" 칩**(`C n` 반대 코너). 순수 헬퍼는 `lib/pdiagram.ts`(PD_FIELDS/NOISE_CATEGORIES/get·hasPDiagramContent), 뮤테이터는 `useFmea`(upsert 지연생성 + add/update/removePdItem·addNoiseItem, 빈 껍데기 자동 제거). 삭제 연쇄는 `deleteStructureNode`에서 interfaces/layout과 같은 지점 정리. JSON export 자동 포함. **Excel 반영·그래픽 박스 렌더는 후속(Phase B 이후).**
 
 ## 남은 작업
-- **Phase A-2 (P-Diagram) — 설계 확정, 구현 대기**:
-  - 엔티티 `pDiagrams[]{ id, structureNodeId, inputs[], controls[], noises[], outputs[], errorStates[] }`. 항목은 **`{id,text}`**(안정 id로 Phase B 연결), noise는 **`{id,text,category}`**.
-  - 정식 5방향(Input Signal/Control Factor/Noise Factor/Ideal Output/Error State). Noise **5분류 = 5개 서브섹션**(부품편차/사용환경/시간경과·열화/시스템상호작용/사용조건).
-  - **부착 레벨 = Subsystem(1) + Component(2)**, System(0) 제외. 노드당 1:1.
-  - UI = **우측 사이드 패널**(모달/탭 아님), 블록 선택 시 컨텍스트 버튼으로 추가/편집. 보유 표시는 **불리언 "P" 칩**(개수 아님, `C n`과 반대 코너).
-  - 삭제: `deleteStructureNode`의 interfaces/layout과 같은 지점에서 pDiagrams 정리. JSON export 포함(별도 섹션). **Excel 반영은 미룸.**
-  - A-2 범위 = P-Diagram 입력·저장·표시(사이드 패널 폼)까지. 정식 박스+화살표 그래픽 렌더는 후속.
-- **Phase B (FMEA 연결)**: errorState→FM, control→예방관리, noise→FC 를 id 참조로 연결(+그 cascade 규칙). 인터페이스↔기능·실패 연결. P-Diagram의 Excel 반영.
+- **Phase B (FMEA 연결)**: errorState→FM, control→예방관리, noise→FC 를 id 참조로 연결(+그 cascade 규칙). 인터페이스↔기능·실패 연결. P-Diagram의 Excel 반영. P-Diagram 그래픽(박스+화살표) 렌더.
 - **Phase 5 (CLAUDE 연동)**: 별도 최소 Node/Express 프록시(스택 예외).
 
 ## 미룰 것(명시적 범위 밖 — 요청 전 손대지 말 것)

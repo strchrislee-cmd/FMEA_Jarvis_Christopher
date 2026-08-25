@@ -5,7 +5,9 @@ import type {
   FmeaType,
   FourM,
   Interface,
+  NoiseCategory,
   OptimizationItem,
+  PDiagram,
   Planning,
   ProjectMeta,
   ScaleTable,
@@ -14,6 +16,7 @@ import { loadProject, saveProject, loadUi, saveUi } from '../lib/storage'
 import { STEPS } from '../lib/steps'
 import { newId } from '../lib/id'
 import { apKey } from '../lib/risk'
+import { emptyPDiagram, hasPDiagramContent, type PdListField } from '../lib/pdiagram'
 import { normalizeProject } from '../lib/factory'
 import {
   deleteStructureNode,
@@ -202,6 +205,45 @@ export function useFmea() {
     setProject((p) => ({ ...p, interfaces: p.interfaces.filter((i) => i.id !== id) }))
   }
 
+  // ── P-Diagram (블록=구조 노드 단위, 항목은 {id,text}) ──
+  // 노드에 P-Diagram이 없으면 만들어 붙이고 mut을 적용한다(지연 생성).
+  function upsertPDiagram(nodeId: string, mut: (pd: PDiagram) => PDiagram) {
+    setProject((p) => {
+      const exists = p.pDiagrams.some((pd) => pd.structureNodeId === nodeId)
+      const list = exists ? p.pDiagrams : [...p.pDiagrams, emptyPDiagram(nodeId)]
+      return { ...p, pDiagrams: list.map((pd) => (pd.structureNodeId === nodeId ? mut(pd) : pd)) }
+    })
+  }
+
+  function addPdItem(nodeId: string, field: PdListField) {
+    upsertPDiagram(nodeId, (pd) => ({ ...pd, [field]: [...pd[field], { id: newId(), text: '' }] }))
+  }
+
+  function addNoiseItem(nodeId: string, category: NoiseCategory) {
+    upsertPDiagram(nodeId, (pd) => ({ ...pd, noises: [...pd.noises, { id: newId(), text: '', category }] }))
+  }
+
+  function updatePdItem(nodeId: string, field: PdListField | 'noises', itemId: string, text: string) {
+    upsertPDiagram(nodeId, (pd) => ({
+      ...pd,
+      [field]: (pd[field] as { id: string }[]).map((it) => (it.id === itemId ? { ...it, text } : it)),
+    }))
+  }
+
+  // 항목 삭제 후 P-Diagram이 완전히 비면 껍데기를 제거한다(export/보유 칩 일관성).
+  function removePdItem(nodeId: string, field: PdListField | 'noises', itemId: string) {
+    setProject((p) => {
+      const next = p.pDiagrams
+        .map((pd) =>
+          pd.structureNodeId === nodeId
+            ? { ...pd, [field]: (pd[field] as { id: string }[]).filter((it) => it.id !== itemId) }
+            : pd,
+        )
+        .filter((pd) => pd.structureNodeId !== nodeId || hasPDiagramContent(pd))
+      return { ...p, pDiagrams: next }
+    })
+  }
+
   // AP 조합표: (S,O,D)→레벨 항목 추가/삭제
   function setApEntry(s: number, o: number, d: number, level: ApLevel) {
     setProject((p) => ({ ...p, apTable: { ...p.apTable, [apKey(s, o, d)]: level } }))
@@ -295,6 +337,10 @@ export function useFmea() {
     addInterface,
     updateInterface,
     removeInterface,
+    addPdItem,
+    addNoiseItem,
+    updatePdItem,
+    removePdItem,
     addOptimization,
     updateOptimization,
     removeOptimization,

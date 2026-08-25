@@ -28,6 +28,7 @@ export function createEmptyProject(): FmeaProject {
     documentation: { summary: '' },
     interfaces: [],
     layout: {},
+    pDiagrams: [],
   }
 }
 
@@ -69,5 +70,6 @@ export function normalizeProject(raw: unknown): FmeaProject {
     documentation: { ...base.documentation, ...obj(p.documentation) } as FmeaProject['documentation'],
     interfaces: arr(p.interfaces),
     layout: obj(p.layout) as FmeaProject['layout'],
+    pDiagrams: arr(p.pDiagrams),
   }
 }
