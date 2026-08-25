@@ -2,11 +2,19 @@ import { useState } from 'react'
 import type { ApLevel, FmeaType } from '../types/fmea'
 import type { useFmea } from '../state/useFmea'
 import { buildRiskRows, RATINGS } from '../lib/risk'
+import { getPDiagram } from '../lib/pdiagram'
 import { helpFor, type FieldKey } from '../lib/help'
 import { dfmeaScalePreset, DFMEA_SCALE_NOTE } from '../lib/scalePreset'
 import FieldHelp from './FieldHelp'
+import PdImportSelect from './PdImportSelect'
 
 type Fmea = ReturnType<typeof useFmea>
+
+// FM이 속한 구조 노드의 Control Factor 목록(prevention 가져오기용).
+function controlsForFm(project: Fmea['project'], functionId: string) {
+  const nodeId = project.functions.find((f) => f.id === functionId)?.structureNodeId
+  return getPDiagram(project, nodeId ?? '')?.controls ?? []
+}
 const DIMS = ['S', 'O', 'D'] as const
 const AP_LEVELS: ApLevel[] = ['H', 'M', 'L']
 // 리스크 표 컬럼 도움말 범례 (라벨 → 필드키)
@@ -73,11 +81,26 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
                     </Td>
                     <Td>{r.fc.text}</Td>
                     <Td>
-                      <CellInput
-                        value={r.fc.prevention ?? ''}
-                        onChange={(v) => fmea.patchCause(r.fc.id, { prevention: v })}
-                        placeholder={helpFor('prevention').placeholder}
+                      {/* P-Diagram Control Factor에서 가져오기(pull) — 같은 노드 한정 */}
+                      <PdImportSelect
+                        label="◇ Control Factor에서 가져오기"
+                        items={controlsForFm(project, r.fm.functionId)}
+                        onPick={(it) =>
+                          fmea.patchCause(r.fc.id, { prevention: it.text, preventionControlId: it.id })
+                        }
                       />
+                      <div className="mt-1 flex items-center gap-1">
+                        {r.fc.preventionControlId && (
+                          <span title="P-Diagram Control Factor에서 가져옴" className="shrink-0 text-xs text-amber-600">
+                            ◇
+                          </span>
+                        )}
+                        <CellInput
+                          value={r.fc.prevention ?? ''}
+                          onChange={(v) => fmea.patchCause(r.fc.id, { prevention: v })}
+                          placeholder={helpFor('prevention').placeholder}
+                        />
+                      </div>
                     </Td>
                     <Td>
                       <RatingSelect

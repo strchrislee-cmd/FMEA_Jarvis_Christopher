@@ -1,5 +1,6 @@
-import type { FmeaProject, ScaleTable, ScaleTables } from '../types/fmea'
+import type { FailureCause, FailureMode, FmeaProject, ScaleTable, ScaleTables } from '../types/fmea'
 import { dfmeaScalePreset } from './scalePreset'
+import { allPdItemIds } from './pdiagram'
 
 function emptyScaleTable(): ScaleTable {
   // 등급 1~10, 기본값은 빈칸 (사용자가 사내 기준으로 채움)
@@ -53,14 +54,31 @@ export function normalizeProject(raw: unknown): FmeaProject {
     return { S: dim(s.S), O: dim(s.O), D: dim(s.D) }
   }
 
+  // (B-1) dangling 출처 포인터 방어: 존재하지 않는 P-Diagram 항목을 가리키면 null 처리.
+  const pDiagrams = arr<FmeaProject['pDiagrams'][number]>(p.pDiagrams)
+  const pdIds = allPdItemIds(pDiagrams)
+  const failureModes = arr<FailureMode>(p.failureModes).map((m) =>
+    m.errorStateId && !pdIds.has(m.errorStateId) ? { ...m, errorStateId: undefined } : m,
+  )
+  const failureCauses = arr<FailureCause>(p.failureCauses).map((c) => {
+    const noiseBad = c.noiseId != null && !pdIds.has(c.noiseId)
+    const ctrlBad = c.preventionControlId != null && !pdIds.has(c.preventionControlId)
+    if (!noiseBad && !ctrlBad) return c
+    return {
+      ...c,
+      noiseId: noiseBad ? undefined : c.noiseId,
+      preventionControlId: ctrlBad ? undefined : c.preventionControlId,
+    }
+  })
+
   return {
     meta: { ...base.meta, ...obj(p.meta) } as FmeaProject['meta'],
     planning: { ...base.planning, ...obj(p.planning), team: arr(obj(p.planning).team) } as FmeaProject['planning'],
     structure: arr(p.structure),
     functions: arr(p.functions),
-    failureModes: arr(p.failureModes),
+    failureModes,
     failureEffects: arr(p.failureEffects),
-    failureCauses: arr(p.failureCauses),
+    failureCauses,
     optimizations: arr(p.optimizations),
     scales: {
       DFMEA: mergeScale(scales.DFMEA),
@@ -70,6 +88,6 @@ export function normalizeProject(raw: unknown): FmeaProject {
     documentation: { ...base.documentation, ...obj(p.documentation) } as FmeaProject['documentation'],
     interfaces: arr(p.interfaces),
     layout: obj(p.layout) as FmeaProject['layout'],
-    pDiagrams: arr(p.pDiagrams),
+    pDiagrams,
   }
 }

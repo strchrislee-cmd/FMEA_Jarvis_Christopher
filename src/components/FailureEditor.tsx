@@ -1,10 +1,18 @@
 import { useState } from 'react'
 import type { useFmea } from '../state/useFmea'
 import { levelLabel } from '../lib/structure'
+import { getPDiagram } from '../lib/pdiagram'
 import { helpFor, type FieldKey } from '../lib/help'
 import FieldHelp from './FieldHelp'
+import PdImportSelect from './PdImportSelect'
 
 type Fmea = ReturnType<typeof useFmea>
+
+// 특정 기능(functionId)이 속한 구조 노드 id — P-Diagram 조회에 사용.
+function nodeOfFunction(project: Fmea['project'], functionId: string | null | undefined) {
+  const f = project.functions.find((x) => x.id === functionId)
+  return f?.structureNodeId
+}
 
 // Step 4: Failure Analysis — 실패체인 FE ← FM ← FC
 // 기능(부정 → FM) 목록 선택 → FM 추가/선택 → 선택 FM의 FE / FC 편집
@@ -76,6 +84,14 @@ export default function FailureEditor({ fmea }: { fmea: Fmea }) {
               placeholder={helpFor('fm').placeholder}
               onAdd={(t) => fmea.addFailureMode(functionId, t)}
             />
+            {/* P-Diagram Error State에서 가져오기(pull) — 같은 노드 한정 */}
+            <div className="mt-1">
+              <PdImportSelect
+                label="◇ Error State에서 가져오기"
+                items={getPDiagram(project, nodeOfFunction(project, functionId) ?? '')?.errorStates ?? []}
+                onPick={(it) => fmea.addFailureMode(functionId, it.text, it.id)}
+              />
+            </div>
             <ul className="mt-2 space-y-1">
               {modesOfFunction.map((m) => {
                 const active = m.id === modeId
@@ -84,13 +100,21 @@ export default function FailureEditor({ fmea }: { fmea: Fmea }) {
                     <button
                       type="button"
                       onClick={() => setModeId(m.id)}
-                      className={`flex-1 rounded-md px-2 py-1 text-left text-sm ${
+                      className={`flex flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left text-sm ${
                         active
                           ? 'bg-blue-600 text-white'
                           : 'border border-gray-200 hover:bg-gray-50'
                       }`}
                     >
-                      {m.text}
+                      {m.errorStateId && (
+                        <span
+                          title="P-Diagram Error State에서 가져옴"
+                          className={`shrink-0 text-xs ${active ? 'text-blue-100' : 'text-amber-600'}`}
+                        >
+                          ◇
+                        </span>
+                      )}
+                      <span className="flex-1">{m.text}</span>
                     </button>
                     <DeleteBtn
                       onClick={() => {
@@ -135,9 +159,18 @@ export default function FailureEditor({ fmea }: { fmea: Fmea }) {
               placeholder={helpFor('fc').placeholder}
               onAdd={(t) => fmea.addFailureCause(selectedMode.id, t)}
             />
+            {/* P-Diagram Noise Factor에서 가져오기(pull) — 같은 노드 한정 */}
+            <div className="mt-1">
+              <PdImportSelect
+                label="◇ Noise Factor에서 가져오기"
+                items={getPDiagram(project, nodeOfFunction(project, selectedMode.functionId) ?? '')?.noises ?? []}
+                onPick={(it) => fmea.addFailureCause(selectedMode.id, it.text, it.id)}
+              />
+            </div>
             <ChildList
               items={project.failureCauses.filter((c) => c.failureModeId === selectedMode.id)}
               onRemove={fmea.removeFailureCause}
+              badgeOf={(c) => ((c as { noiseId?: string }).noiseId ? '◇' : null)}
             />
           </>
         )}
@@ -208,24 +241,36 @@ function ItemAdder({
   )
 }
 
-function ChildList({
+function ChildList<T extends { id: string; text: string }>({
   items,
   onRemove,
+  badgeOf,
 }: {
-  items: { id: string; text: string }[]
+  items: T[]
   onRemove: (id: string) => void
+  badgeOf?: (item: T) => string | null
 }) {
   return (
     <ul className="mt-2 space-y-1">
-      {items.map((it) => (
-        <li
-          key={it.id}
-          className="flex items-start justify-between gap-2 rounded-md border border-gray-200 px-2 py-1.5 text-sm"
-        >
-          <span className="flex-1">{it.text}</span>
-          <DeleteBtn onClick={() => onRemove(it.id)} />
-        </li>
-      ))}
+      {items.map((it) => {
+        const badge = badgeOf?.(it) ?? null
+        return (
+          <li
+            key={it.id}
+            className="flex items-start justify-between gap-2 rounded-md border border-gray-200 px-2 py-1.5 text-sm"
+          >
+            <span className="flex-1">
+              {badge && (
+                <span title="P-Diagram에서 가져옴" className="mr-1 text-xs text-amber-600">
+                  {badge}
+                </span>
+              )}
+              {it.text}
+            </span>
+            <DeleteBtn onClick={() => onRemove(it.id)} />
+          </li>
+        )
+      })}
       {items.length === 0 && <Empty text="항목이 없습니다." />}
     </ul>
   )

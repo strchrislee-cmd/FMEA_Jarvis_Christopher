@@ -30,6 +30,7 @@ export interface FailureMode {
   id: string
   functionId: string // 추적성: 어떤 기능의 고장모드인가
   text: string
+  errorStateId?: string // (B-1) 출처: 이 FM을 만든 P-Diagram Error State 항목 id (텍스트 비미러)
 }
 // Severity(S)는 효과(FE)에 귀속한다.
 export interface FailureEffect {
@@ -47,6 +48,8 @@ export interface FailureCause {
   occurrence?: number // O 1~10
   detectionControl?: string // 현재 검출관리 (→ D)
   detection?: number // D 1~10
+  noiseId?: string // (B-1) 출처: 이 FC를 만든 P-Diagram Noise Factor 항목 id (텍스트 비미러)
+  preventionControlId?: string // (B-1) 출처: prevention을 채운 P-Diagram Control Factor 항목 id (텍스트 비미러)
 }
 
 // ── 5. Risk Analysis ──────────────────────────

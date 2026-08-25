@@ -50,9 +50,9 @@ DFMEA/PFMEA를 AIAG-VDA 7단계로 안내하고, 각 단계에서 예시를 보�
 - `planning{ scope, inScope, outOfScope, assumptions, team[] }`  (Step 1)
 - `structure: StructureNode[]{ id, parentId|null, name, level(0/1/2), category?(4M) }`  (트리; 0=System,1=Subsystem,2=Component)
 - `functions[]{ id, structureNodeId, text }`  → structure
-- `failureModes[]{ id, functionId, text }`  → function (실패=기능의 부정)
+- `failureModes[]{ id, functionId, text, errorStateId? }`  → function (실패=기능의 부정). errorStateId = P-Diagram 출처(B-1)
 - `failureEffects[]{ id, failureModeId, text, severity? }`  (S는 여기)
-- `failureCauses[]{ id, failureModeId, text, prevention?, occurrence?, detectionControl?, detection? }`  (O·D·관리는 여기)
+- `failureCauses[]{ id, failureModeId, text, prevention?, occurrence?, detectionControl?, detection?, noiseId?, preventionControlId? }`  (O·D·관리는 여기; noiseId·preventionControlId = P-Diagram 출처, B-1)
 - `optimizations[]{ id, failureCauseId, preventiveAction, detectiveAction, responsibility, targetDate, status, severity?, occurrence?, detection? }`  (조치후 S/O/D는 원본 FE/FC 미변경, 여기 별도 보관)
 - `scales{ DFMEA, PFMEA }` 각 `{ S,O,D: string[10] }`  (등급 1~10 설명, 편집·export 대상)
 - `apTable: Record<"s-o-d", H|M|L>`  (AP 조합표; 편집/JSON주입)
@@ -81,9 +81,11 @@ DFMEA/PFMEA를 AIAG-VDA 7단계로 안내하고, 각 단계에서 예시를 보�
   - Step 2 다이어그램 모드에선 가이드 패널 숨겨 폭 확보(다른 스텝 폭 불변).
   - **Component 드릴인**: Subsystem 본체 더블클릭 → 내부 진입(`drillInto` 세션 UI, 단일값, 저장 안 함). 그 Subsystem의 Component를 블록으로 편집(생성/이름/드래그/**같은 부모 내 Component↔Component 연결**, 컨텍스트 필터 렌더). "← 상위로"+브레드크럼. 최상위 Subsystem에 **Component 개수 배지 `C n`** + 진입 힌트. PNG 파일명에 컨텍스트 반영. 본체 더블클릭=드릴(포인터 캡처가 native dblclick 삼켜 타이밍 판정), 이름 텍스트=편집.
 - **Phase A-2 (P-Diagram, 블록 단위)** — `types`에 `pDiagrams[]{ id, structureNodeId, inputs[], controls[], noises[], outputs[], errorStates[] }`. 항목=**`{id,text}`**(안정 id로 Phase B 연결), noise=**`{id,text,category}`**. 정식 5방향(Input Signal/Control Factor/Ideal Output/Error State + Noise Factor **5분류 서브섹션**: 부품편차/시간경과·열화/사용조건/사용환경/시스템상호작용). **부착 = 선택 블록(Subsystem·Component), System 제외**, 노드당 1:1 지연 생성. UI = **우측 사이드 패널**(`PDiagramPanel.tsx`), 블록 선택 시 툴바 "P-Diagram" 컨텍스트 토글로 열기. 보유 표시 = **불리언 "P" 칩**(`C n` 반대 코너). 순수 헬퍼는 `lib/pdiagram.ts`(PD_FIELDS/NOISE_CATEGORIES/get·hasPDiagramContent), 뮤테이터는 `useFmea`(upsert 지연생성 + add/update/removePdItem·addNoiseItem, 빈 껍데기 자동 제거). 삭제 연쇄는 `deleteStructureNode`에서 interfaces/layout과 같은 지점 정리. JSON export 자동 포함. **Excel 반영·그래픽 박스 렌더는 후속(Phase B 이후).**
+- **Phase B-1 (P-Diagram → FMEA 연결)** — **출처 포인터 방식**(참조, 텍스트 비미러): `FM.errorStateId?`, `FC.noiseId?`, `FC.preventionControlId?` 전부 nullable·가산. 각자 text가 단일 진실원, 포인터는 출처만 기록. **Pull UI(가져오기, push 없음)**: Step 4 `FailureEditor`에서 FM은 같은 노드 Error State, FC는 같은 노드 Noise 셀렉트(`PdImportSelect.tsx`, text 프리필+포인터), Step 5 `RiskEditor`의 prevention은 같은 노드 Control Factor 셀렉트. **same-node 제약**(cross-node 미룸). 출처는 읽기전용 "◇" 태그. **삭제:** 상류 P-Diagram 항목 삭제 시 `removePdItem`이 인바운드 포인터만 null(FM/FC 생존); 노드 삭제는 same-node라 기존 cascade로 양쪽 정리. `normalizeProject`에 dangling 포인터 null 방어. **미룸(손대지 말 것):** 텍스트 미러·out-of-sync 표시, cross-node, push/양방향, 복수 control, Excel 출처 컬럼.
 
 ## 남은 작업
-- **Phase B (FMEA 연결)**: errorState→FM, control→예방관리, noise→FC 를 id 참조로 연결(+그 cascade 규칙). 인터페이스↔기능·실패 연결. P-Diagram의 Excel 반영. P-Diagram 그래픽(박스+화살표) 렌더.
+- **Phase B-2 (인터페이스 → FMEA)**: 인터페이스(노드 쌍)의 실패는 "인터페이스 함수"를 거쳐 기존 FM 파이프라인을 타야 함 → `FunctionItem` 앵커를 노드|인터페이스로 일반화(FunctionEditor·buildRiskRows·structurePath·excel 파급). **침습적이라 분리·후속.**
+- **Excel 반영**: P-Diagram·B-1 출처·인터페이스의 Excel 표기(B-2 뒤 별도 꼬리 작업). P-Diagram 그래픽(박스+화살표) 렌더.
 - **Phase 5 (CLAUDE 연동)**: 별도 최소 Node/Express 프록시(스택 예외).
 
 ## 미룰 것(명시적 범위 밖 — 요청 전 손대지 말 것)

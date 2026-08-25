@@ -114,10 +114,11 @@ export function useFmea() {
   }
 
   // ── Step 4: Failure (FE ← FM ← FC) ────────────
-  function addFailureMode(functionId: string, text: string) {
+  // errorStateId는 P-Diagram Error State에서 가져온 경우의 출처(선택). 텍스트는 비미러.
+  function addFailureMode(functionId: string, text: string, errorStateId?: string) {
     setProject((p) => ({
       ...p,
-      failureModes: [...p.failureModes, { id: newId(), functionId, text }],
+      failureModes: [...p.failureModes, { id: newId(), functionId, text, errorStateId }],
     }))
   }
 
@@ -140,10 +141,11 @@ export function useFmea() {
     }))
   }
 
-  function addFailureCause(failureModeId: string, text: string) {
+  // noiseId는 P-Diagram Noise Factor에서 가져온 경우의 출처(선택). 텍스트는 비미러.
+  function addFailureCause(failureModeId: string, text: string, noiseId?: string) {
     setProject((p) => ({
       ...p,
-      failureCauses: [...p.failureCauses, { id: newId(), failureModeId, text }],
+      failureCauses: [...p.failureCauses, { id: newId(), failureModeId, text, noiseId }],
     }))
   }
 
@@ -163,7 +165,7 @@ export function useFmea() {
     }))
   }
 
-  function patchCause(fcId: string, patch: Partial<{ occurrence: number; detection: number; prevention: string; detectionControl: string }>) {
+  function patchCause(fcId: string, patch: Partial<{ occurrence: number; detection: number; prevention: string; detectionControl: string; preventionControlId: string | undefined }>) {
     setProject((p) => ({
       ...p,
       failureCauses: p.failureCauses.map((c) => (c.id === fcId ? { ...c, ...patch } : c)),
@@ -231,16 +233,32 @@ export function useFmea() {
   }
 
   // 항목 삭제 후 P-Diagram이 완전히 비면 껍데기를 제거한다(export/보유 칩 일관성).
+  // (B-1) 그 항목을 출처로 가리키던 FMEA 인바운드 포인터도 null 처리한다
+  // — FM/FC 데이터 자체는 생존, 출처 링크만 끊긴다(상류 삭제 시 하류 생존 원칙).
   function removePdItem(nodeId: string, field: PdListField | 'noises', itemId: string) {
     setProject((p) => {
-      const next = p.pDiagrams
+      const pDiagrams = p.pDiagrams
         .map((pd) =>
           pd.structureNodeId === nodeId
             ? { ...pd, [field]: (pd[field] as { id: string }[]).filter((it) => it.id !== itemId) }
             : pd,
         )
         .filter((pd) => pd.structureNodeId !== nodeId || hasPDiagramContent(pd))
-      return { ...p, pDiagrams: next }
+      return {
+        ...p,
+        pDiagrams,
+        failureModes: p.failureModes.map((m) =>
+          m.errorStateId === itemId ? { ...m, errorStateId: undefined } : m,
+        ),
+        failureCauses: p.failureCauses.map((c) => {
+          if (c.noiseId !== itemId && c.preventionControlId !== itemId) return c
+          return {
+            ...c,
+            noiseId: c.noiseId === itemId ? undefined : c.noiseId,
+            preventionControlId: c.preventionControlId === itemId ? undefined : c.preventionControlId,
+          }
+        }),
+      }
     })
   }
 

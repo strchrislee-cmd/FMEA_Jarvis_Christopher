@@ -36,3 +36,14 @@ export function hasPDiagramContent(pd: PDiagram | undefined): boolean {
     pd.inputs.length + pd.controls.length + pd.noises.length + pd.outputs.length + pd.errorStates.length > 0
   )
 }
+
+// 모든 P-Diagram 항목 id 집합(dangling 출처 포인터 방어용).
+export function allPdItemIds(pDiagrams: PDiagram[]): Set<string> {
+  const ids = new Set<string>()
+  for (const pd of pDiagrams) {
+    for (const it of [...pd.inputs, ...pd.controls, ...pd.noises, ...pd.outputs, ...pd.errorStates]) {
+      ids.add(it.id)
+    }
+  }
+  return ids
+}
