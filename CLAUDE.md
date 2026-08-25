@@ -69,7 +69,8 @@ DFMEA/PFMEA를 AIAG-VDA 7단계로 안내하고, 각 단계에서 예시를 보�
 - **Phase 1 (Step 1~3)**: Planning 폼 / Structure 3레벨 고정 트리(유형별 라벨, level2 자식추가 비활성, PFMEA WorkElement 4M) / Function. **결정: 3레벨 고정, cascade+확인창 삭제.**
 - **Phase 2 (Step 4)**: 실패체인 FE←FM←FC 3열 편집. **결정: FE/FC는 FM에 직접 연결(결정 A). 정리 로직 계층화(단일 경로).**
 - **Phase 3 (Step 5)**: S/O/D 척도표·현재관리·RPN·AP. **결정 (B): RiskItem 제거, S→FE / O·D·관리→FC, 행은 파생. RPN/AP 파생·미저장. AP는 조합표 룩업(구간 금지). optimization은 failureCauseId 앵커. 척도표/AP표는 하드코딩 없이 편집 가능.**
-- **Phase 4 (Step 6·7 + Excel)**: Optimization(전/후 나란히, 조치후값 별도보관) / Documentation(요약+내보내기) / **Excel(xlsx-js-style 고정, 시트=표지/FMEA/척도표, 1행=FE×FM×FC, 단일 조치는 숫자셀·다건만 "; " 병합, 헤더 굵게+열너비만).**
+- **Phase 4 (Step 6·7 + Excel)**: Optimization(전/후 나란히, 조치후값 별도보관) / Documentation(요약+내보내기) / **Excel(xlsx-js-style 고정, 시트=표지/FMEA/척도표, 1행=FE×FM×FC, 단일 조치는 숫자셀·다건만 "; " 병합).**
+- **Excel 서식 개선**(`lib/excel.ts`, 데이터·컬럼·값 불변, 스타일만): 전 셀 세로 가운데+wrapText, 텍스트 좌측·숫자(S/O/D/RPN/AP) 가운데 정렬, 내용 맞춤 열너비+행높이 추정. 헤더 굵게+가운데+테두리+**컬럼 그룹별 배경 톤**(구조/기능·실패·리스크·조치 4색). 의미색만: **RPN 연녹/연주황/연적**(`rpnBand`), **AP H연적·M연주황·L연녹**, **S=9·10 행의 S셀 진한 강조+굵은 테두리**(`isSafetyRow`); 그 외 셀 무채색. 얇은 테두리+그룹경계 medium 세로선. 헤더행 **AutoFilter**(정렬/필터). 척도표·표지도 서식(표지 프로젝트명 16pt). **한계: freeze pane은 pinned xlsx-js-style(0.18.5) 라이터가 미출력 → AutoFilter로 대체(스크롤 고정은 미지원).** 검증은 앱 다운로드 캡처 → 생성 xlsx의 값(불변)·styles.xml 실측.
 - **단일 HTML 빌드**: `dist/index.html` 하나로 인라인(file:// 실행). vite-plugin-singlefile은 Vite8/rolldown 충돌 → 커스텀 플러그인.
 - **가이드/도움말**: `lib/help.ts`(필드키→{oneLiner,placeholder,detail(좋은/나쁜 예)}) + `<FieldHelp>`(? 팝오버). Step 1 세트 예시(LED 헤드램프 계열) + "예시 채우기".
 - **회사 척도 반영**: DFMEA 척도표에 사내 프리셋(`lib/scalePreset.ts`), **등급 1·2·4·6·8·10만 사용(3·5·7·9 제거)**. "회사 기본값 불러오기" 버튼 + Note 각주. **PFMEA 척도표는 빈칸(공정관리 기준 별도).**
