@@ -88,8 +88,23 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
             Step 4에서 각 FM에 FE와 FC를 모두 추가하면 행이 자동 생성됩니다.
           </p>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-gray-200">
-            <table className="w-full text-sm">
+          // 가로 스크롤 없이 화면 안에서 해결: table-fixed + colgroup 폭 배분.
+          // overflow 컨테이너를 두지 않아 헤더 sticky가 본문 스크롤(main)에 붙는다.
+          <div className="rounded-lg border border-gray-200">
+            <table className="w-full table-fixed text-sm">
+              <colgroup>
+                <col style={{ width: '72px' }} />{/* 구조 */}
+                <col />{/* FM (남는 폭 분배) */}
+                <col />{/* FE */}
+                <col style={{ width: '50px' }} />{/* S */}
+                <col />{/* FC */}
+                <col style={{ width: '88px' }} />{/* 예방관리 */}
+                <col style={{ width: '50px' }} />{/* O */}
+                <col style={{ width: '88px' }} />{/* 검출관리 */}
+                <col style={{ width: '50px' }} />{/* D */}
+                <col style={{ width: '72px' }} />{/* RPN */}
+                <col style={{ width: '84px' }} />{/* AP */}
+              </colgroup>
               <thead className="bg-gray-50 text-xs text-gray-500">
                 <tr>
                   <Th>구조</Th>
@@ -116,20 +131,26 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
                     className={`border-t border-gray-100 ${safety ? 'bg-rose-50' : ''}`}
                   >
                     <Td>
-                      <span className="text-xs text-gray-500">{nodeLabelForFm(project, r.fm.functionId)}</span>
+                      <div className="line-clamp-2 break-words text-xs text-gray-500" title={nodeLabelForFm(project, r.fm.functionId)}>
+                        {nodeLabelForFm(project, r.fm.functionId)}
+                      </div>
                     </Td>
                     <Td>
-                      {safety && (
-                        <span
-                          title={`안전/법규 관련(S=${r.s}) — RPN과 무관하게 우선 검토`}
-                          className="mr-1 inline-flex items-center rounded bg-rose-600 px-1 py-0.5 text-[10px] font-bold text-white"
-                        >
-                          ⚠ 안전
-                        </span>
-                      )}
-                      {r.fm.text}
+                      <div className="line-clamp-2 break-words" title={r.fm.text}>
+                        {safety && (
+                          <span
+                            title={`안전/법규 관련(S=${r.s}) — RPN과 무관하게 우선 검토`}
+                            className="mr-1 inline-flex items-center rounded bg-rose-600 px-1 py-0.5 text-[10px] font-bold text-white align-middle"
+                          >
+                            ⚠ 안전
+                          </span>
+                        )}
+                        {r.fm.text}
+                      </div>
                     </Td>
-                    <Td>{r.fe.text}</Td>
+                    <Td>
+                      <div className="line-clamp-2 break-words" title={r.fe.text}>{r.fe.text}</div>
+                    </Td>
                     <Td>
                       <RatingSelect
                         value={r.s}
@@ -139,7 +160,9 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
                         }}
                       />
                     </Td>
-                    <Td>{r.fc.text}</Td>
+                    <Td>
+                      <div className="line-clamp-2 break-words" title={r.fc.text}>{r.fc.text}</div>
+                    </Td>
                     <Td>
                       {/* P-Diagram Control Factor에서 가져오기(pull) — 같은 노드 한정 */}
                       <PdImportSelect
@@ -237,11 +260,11 @@ function ApCell({ entry, rpn }: { entry: ApEntry | undefined; rpn: number | unde
   if (rpn == null) return <span className="text-gray-300">—</span>
   if (!entry) return <span className="text-amber-600">미설정</span>
   return (
-    <div className="leading-tight">
-      <div className="font-medium whitespace-nowrap">
+    <div className="leading-tight" title={`${entry.ap} (${AP_KO[entry.ap]}) · ${AP_ACTION[entry.ap]}${entry.label ? ' · ' + entry.label : ''}`}>
+      <div className="break-words font-medium">
         {entry.ap} ({AP_KO[entry.ap]}) · {AP_ACTION[entry.ap]}
       </div>
-      {entry.label && <div className="mt-0.5 text-[11px] text-gray-500">{entry.label}</div>}
+      {entry.label && <div className="mt-0.5 line-clamp-2 break-words text-[11px] text-gray-500">{entry.label}</div>}
     </div>
   )
 }
@@ -439,7 +462,7 @@ function RatingSelect({
     <select
       value={value ?? ''}
       onChange={(e) => onChange(e.target.value ? Number(e.target.value) : undefined)}
-      className="w-14 rounded-md border border-gray-300 px-1 py-1 text-sm"
+      className="w-full min-w-0 rounded-md border border-gray-300 px-1 py-1 text-sm"
     >
       <option value="">—</option>
       {RATINGS.map((r) => (
@@ -493,14 +516,17 @@ function CellInput({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className="w-full min-w-28 rounded-md border border-gray-300 px-2 py-1 text-sm outline-none focus:border-blue-500"
+      className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm outline-none focus:border-blue-500"
     />
   )
 }
 
 function Th({ children }: { children: React.ReactNode }) {
-  return <th className="px-2 py-1.5 text-left font-medium">{children}</th>
+  // 세로 스크롤 시 헤더 유지(sticky). 스크롤 컨테이너는 본문 main.
+  return (
+    <th className="sticky top-0 z-10 bg-gray-50 px-2 py-1.5 text-left font-medium">{children}</th>
+  )
 }
 function Td({ children }: { children: React.ReactNode }) {
-  return <td className="px-2 py-1.5 align-top">{children}</td>
+  return <td className="px-2 py-2 align-top">{children}</td>
 }
