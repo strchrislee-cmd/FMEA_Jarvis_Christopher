@@ -22,9 +22,11 @@ export default function OptimizationEditor({ fmea }: { fmea: Fmea }) {
   }
 
   return (
-    <div className="grid max-w-6xl grid-cols-[1fr_1.2fr] gap-4">
-      {/* 좌: 리스크 행 목록 */}
-      <div className="rounded-lg border border-gray-200 p-3">
+    // 좁은 화면(<900px): 상하 배치(목록 위, 패널 아래). ≥900px: 좌=나머지폭, 우=최소폭 고정.
+    // 우측 고정폭(400px)이 도움말/폼이 찌그러지지 않게 보장하고, 좌측이 남는 폭을 쓴다.
+    <div className="flex max-w-6xl flex-col gap-4 min-[900px]:grid min-[900px]:grid-cols-[minmax(0,1fr)_400px] min-[900px]:items-start">
+      {/* 좌: 리스크 행 목록 (min-w-0 로 truncate가 트랙을 밀지 않게) */}
+      <div className="min-w-0 rounded-lg border border-gray-200 p-3">
         <h3 className="mb-2 text-sm font-medium text-gray-700">리스크 행 (개선 대상 선택)</h3>
         <ul className="space-y-0.5">
           {rows.map((r) => {
@@ -35,33 +37,45 @@ export default function OptimizationEditor({ fmea }: { fmea: Fmea }) {
             const nodeId = project.functions.find((f) => f.id === r.fm.functionId)?.structureNodeId
             const nodeLabel = nodeId ? nodeContextLabel(project.structure, nodeId, project.meta.type) : ''
             const active = key === rowKey
+            const apCell = r.rpn == null ? '—' : (r.ap ?? '미설정')
             return (
               <li key={key}>
                 <button
                   type="button"
                   onClick={() => setRowKey(key)}
-                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs ${
+                  className={`flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left ${
                     active ? 'bg-blue-600 text-white' : 'hover:bg-gray-100'
                   }`}
                 >
-                  <span className="flex-1 truncate">
+                  {/* 1줄: [소속] FM · RPN/AP · 조치 뱃지(우측) */}
+                  <div className="flex w-full items-center gap-2 text-xs">
                     {nodeLabel && (
-                      <span className={active ? 'text-blue-100' : 'text-gray-400'}>[{nodeLabel}] </span>
+                      <span
+                        className={`shrink-0 rounded px-1 py-0.5 text-[10px] ${
+                          active ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'
+                        }`}
+                      >
+                        {nodeLabel}
+                      </span>
                     )}
-                    {r.fm.text} · {r.fe.text} · {r.fc.text}
-                  </span>
-                  <span className={active ? 'text-blue-100' : 'text-gray-400'}>
-                    RPN {r.rpn ?? '—'}
-                  </span>
-                  {optCount > 0 && (
-                    <span
-                      className={`rounded-full px-1.5 py-0.5 ${
-                        active ? 'bg-white/20 text-white' : 'bg-green-50 text-green-700'
-                      }`}
-                    >
-                      조치 {optCount}
+                    <span className="min-w-0 flex-1 truncate font-medium">{r.fm.text}</span>
+                    <span className={`shrink-0 tabular-nums ${active ? 'text-blue-100' : 'text-gray-400'}`}>
+                      RPN {r.rpn ?? '—'} · AP {apCell}
                     </span>
-                  )}
+                    {optCount > 0 && (
+                      <span
+                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-xs ${
+                          active ? 'bg-white/20 text-white' : 'bg-green-50 text-green-700'
+                        }`}
+                      >
+                        조치 {optCount}
+                      </span>
+                    )}
+                  </div>
+                  {/* 2줄: FE → FC (작은 회색, 말줄임) */}
+                  <div className={`w-full truncate text-[11px] ${active ? 'text-blue-100' : 'text-gray-400'}`}>
+                    {r.fe.text} → {r.fc.text}
+                  </div>
                 </button>
               </li>
             )
@@ -86,7 +100,8 @@ function OptPanel({ fmea, row }: { fmea: Fmea; row: RiskRow }) {
   const opts = project.optimizations.filter((o) => o.failureCauseId === row.fc.id)
 
   return (
-    <div>
+    // @container: 아래 폼이 뷰포트가 아니라 이 패널 자체 폭에 반응(좁으면 1열)
+    <div className="@container">
       {/* 전(현재) */}
       <div className="mb-3 rounded-md bg-gray-50 p-2 text-xs text-gray-600">
         <span className="font-medium text-gray-700">전(현재)</span> · FC: {row.fc.text} ·
@@ -131,7 +146,7 @@ function OptPanel({ fmea, row }: { fmea: Fmea; row: RiskRow }) {
             const pAp = postAP(o, project.apTable)
             return (
               <li key={o.id} className="rounded-md border border-gray-200 p-2">
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 @[360px]:grid-cols-2">
                   <Field label="예방조치">
                     <TextInput
                       value={o.preventiveAction}
