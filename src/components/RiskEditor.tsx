@@ -210,9 +210,10 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
       {/* AP 조합표 편집 */}
       <ApTableEditor fmea={fmea} />
 
-      {/* 등급 선택 설명 토스트(약 2초, 자동 사라짐). 세로화면 스크롤바 높이(우측 중앙)에 표시. */}
+      {/* 등급 선택 설명 토스트(약 2초, 자동 사라짐). 하단 가운데 고정 — 넓은 폭에서
+          긴 문구가 2~3줄로 줄바꿈되며, 좌우 여백으로 테이블/버튼을 가리지 않는다. */}
       {toast && (
-        <div className="pointer-events-none fixed right-6 top-1/2 z-50 max-w-xs -translate-y-1/2 rounded-lg bg-gray-900/95 px-4 py-2 text-sm text-white shadow-lg">
+        <div className="pointer-events-none fixed bottom-6 left-1/2 z-50 w-[90vw] max-w-xl -translate-x-1/2 whitespace-pre-line break-words rounded-lg bg-gray-900/95 px-4 py-2.5 text-center text-sm leading-relaxed text-white shadow-lg">
           {toast}
         </div>
       )}
