@@ -21,12 +21,62 @@ export default function FailureEditor({ fmea }: { fmea: Fmea }) {
   const [functionId, setFunctionId] = useState<string | null>(null)
   const [modeId, setModeId] = useState<string | null>(null)
 
-  const modesOfFunction = project.failureModes.filter((m) => m.functionId === functionId)
   const selectedMode = project.failureModes.find((m) => m.id === modeId) ?? null
   // FE/FC 열 헤더에 붙일 소속 표기: "노드 소속 · 선택 FM". 선택 FM이 있을 때만.
   const fmContext = selectedMode
     ? `${nodeContextLabel(project.structure, nodeOfFunction(project, selectedMode.functionId) ?? '', project.meta.type)} · ${truncate(selectedMode.text, 24)}`
     : undefined
+
+  // 선택된 기능 바로 아래에 펼치는 FM 패널(입력 + Error State 가져오기 + FM 목록).
+  const fmPanel = (fid: string) => {
+    const modes = project.failureModes.filter((m) => m.functionId === fid)
+    return (
+      <div className="ml-2 mt-1 rounded-md border-l-2 border-blue-300 bg-blue-50/50 px-2 py-2">
+        <ItemAdder placeholder={helpFor('fm').placeholder} onAdd={(t) => fmea.addFailureMode(fid, t)} />
+        {/* P-Diagram Error State에서 가져오기(pull) — 같은 노드 한정 */}
+        <div className="mt-1">
+          <PdImportSelect
+            label="◇ Error State에서 가져오기"
+            items={getPDiagram(project, nodeOfFunction(project, fid) ?? '')?.errorStates ?? []}
+            onPick={(it) => fmea.addFailureMode(fid, it.text, it.id)}
+          />
+        </div>
+        <ul className="mt-2 space-y-1">
+          {modes.map((m) => {
+            const active = m.id === modeId
+            return (
+              <li key={m.id} className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setModeId(m.id)}
+                  className={`flex flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left text-sm ${
+                    active ? 'bg-blue-600 text-white' : 'border border-gray-200 bg-white hover:bg-gray-50'
+                  }`}
+                >
+                  {m.errorStateId && (
+                    <span
+                      title="P-Diagram Error State에서 가져옴"
+                      className={`shrink-0 text-xs ${active ? 'text-blue-100' : 'text-amber-600'}`}
+                    >
+                      ◇
+                    </span>
+                  )}
+                  <span className="flex-1">{m.text}</span>
+                </button>
+                <DeleteBtn
+                  onClick={() => {
+                    fmea.removeFailureMode(m.id)
+                    if (m.id === modeId) setModeId(null)
+                  }}
+                />
+              </li>
+            )
+          })}
+          {modes.length === 0 && <Empty text="고장모드가 없습니다." />}
+        </ul>
+      </div>
+    )
+  }
 
   if (project.functions.length === 0) {
     return (
@@ -82,6 +132,8 @@ export default function FailureEditor({ fmea }: { fmea: Fmea }) {
                             </span>
                           )}
                         </button>
+                        {/* 인라인 확장: 선택 기능 바로 아래에 FM 패널 */}
+                        {active && fmPanel(f.id)}
                       </li>
                     )
                   })}
@@ -114,6 +166,7 @@ export default function FailureEditor({ fmea }: { fmea: Fmea }) {
                         >
                           {f.text}
                         </button>
+                        {active && fmPanel(f.id)}
                       </li>
                     )
                   })}
@@ -122,62 +175,10 @@ export default function FailureEditor({ fmea }: { fmea: Fmea }) {
             )
           })()}
         </div>
-
-        {functionId && (
-          <div className="mt-3 border-t border-gray-100 pt-3">
-            <ItemAdder
-              placeholder={helpFor('fm').placeholder}
-              onAdd={(t) => fmea.addFailureMode(functionId, t)}
-            />
-            {/* P-Diagram Error State에서 가져오기(pull) — 같은 노드 한정 */}
-            <div className="mt-1">
-              <PdImportSelect
-                label="◇ Error State에서 가져오기"
-                items={getPDiagram(project, nodeOfFunction(project, functionId) ?? '')?.errorStates ?? []}
-                onPick={(it) => fmea.addFailureMode(functionId, it.text, it.id)}
-              />
-            </div>
-            <ul className="mt-2 space-y-1">
-              {modesOfFunction.map((m) => {
-                const active = m.id === modeId
-                return (
-                  <li key={m.id} className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setModeId(m.id)}
-                      className={`flex flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left text-sm ${
-                        active
-                          ? 'bg-blue-600 text-white'
-                          : 'border border-gray-200 hover:bg-gray-50'
-                      }`}
-                    >
-                      {m.errorStateId && (
-                        <span
-                          title="P-Diagram Error State에서 가져옴"
-                          className={`shrink-0 text-xs ${active ? 'text-blue-100' : 'text-amber-600'}`}
-                        >
-                          ◇
-                        </span>
-                      )}
-                      <span className="flex-1">{m.text}</span>
-                    </button>
-                    <DeleteBtn
-                      onClick={() => {
-                        fmea.removeFailureMode(m.id)
-                        if (m.id === modeId) setModeId(null)
-                      }}
-                    />
-                  </li>
-                )
-              })}
-              {modesOfFunction.length === 0 && <Empty text="고장모드가 없습니다." />}
-            </ul>
-          </div>
-        )}
       </Column>
 
       {/* 2열: FE */}
-      <Column title="영향 FE" hint="상위 레벨에 대한 영향" helpKey="fe" context={fmContext}>
+      <Column title="영향 FE" hint="상위 레벨에 대한 영향" helpKey="fe" context={fmContext} sticky>
         {!selectedMode ? (
           <Empty text="왼쪽에서 고장모드(FM)를 선택하세요." />
         ) : (
@@ -195,7 +196,7 @@ export default function FailureEditor({ fmea }: { fmea: Fmea }) {
       </Column>
 
       {/* 3열: FC */}
-      <Column title="원인 FC" hint="하위 레벨 원인" helpKey="fc" context={fmContext}>
+      <Column title="원인 FC" hint="하위 레벨 원인" helpKey="fc" context={fmContext} sticky>
         {!selectedMode ? (
           <Empty text="왼쪽에서 고장모드(FM)를 선택하세요." />
         ) : (
@@ -229,16 +230,20 @@ function Column({
   hint,
   helpKey,
   context,
+  sticky,
   children,
 }: {
   title: string
   hint?: string
   helpKey?: FieldKey
   context?: string
+  sticky?: boolean
   children: React.ReactNode
 }) {
+  // sticky: 좌측 아코디언이 길어져도 우측 FE/FC 열이 시야에 남게(self-start로 그리드 stretch 해제).
+  // position:sticky는 애니메이션이 없어 prefers-reduced-motion과 무관하게 안전.
   return (
-    <div className="rounded-lg border border-gray-200 p-3">
+    <div className={`rounded-lg border border-gray-200 p-3 ${sticky ? 'self-start sticky top-2' : ''}`}>
       <h3 className="text-sm font-medium text-gray-700">
         {title}
         {hint && <span className="ml-1 text-xs font-normal text-gray-400">· {hint}</span>}
