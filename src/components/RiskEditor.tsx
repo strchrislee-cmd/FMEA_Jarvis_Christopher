@@ -3,6 +3,7 @@ import type { ApEntry, ApLevel, FmeaType } from '../types/fmea'
 import type { useFmea } from '../state/useFmea'
 import { buildRiskRows, isSafetyRow, lookupAp, RATINGS, rpnBand, type RpnBand } from '../lib/risk'
 import { getPDiagram } from '../lib/pdiagram'
+import { nodeContextLabel } from '../lib/structure'
 import { companyApPreset } from '../lib/apPreset'
 import { helpFor, RPN_HINT, SOD_LABELS, type FieldKey } from '../lib/help'
 import { dfmeaScalePreset, DFMEA_SCALE_NOTE } from '../lib/scalePreset'
@@ -16,6 +17,12 @@ type ScaleDim = 'S' | 'O' | 'D'
 function controlsForFm(project: Fmea['project'], functionId: string) {
   const nodeId = project.functions.find((f) => f.id === functionId)?.structureNodeId
   return getPDiagram(project, nodeId ?? '')?.controls ?? []
+}
+
+// FM이 속한 구조 노드 소속 라벨(리스크 행 "구조" 컬럼용, 표시 전용).
+function nodeLabelForFm(project: Fmea['project'], functionId: string) {
+  const nodeId = project.functions.find((f) => f.id === functionId)?.structureNodeId
+  return nodeId ? nodeContextLabel(project.structure, nodeId, project.meta.type) : ''
 }
 const DIMS = ['S', 'O', 'D'] as const
 const AP_LEVELS: ApLevel[] = ['H', 'M', 'L']
@@ -85,6 +92,7 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-xs text-gray-500">
                 <tr>
+                  <Th>구조</Th>
                   <Th>고장모드 FM</Th>
                   <Th>영향 FE</Th>
                   <Th>{SOD_LABELS.S}</Th>
@@ -107,6 +115,9 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
                     key={`${r.fe.id}-${r.fm.id}-${r.fc.id}`}
                     className={`border-t border-gray-100 ${safety ? 'bg-rose-50' : ''}`}
                   >
+                    <Td>
+                      <span className="text-xs text-gray-500">{nodeLabelForFm(project, r.fm.functionId)}</span>
+                    </Td>
                     <Td>
                       {safety && (
                         <span

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { useFmea } from '../state/useFmea'
-import { levelLabel } from '../lib/structure'
+import { flattenTree, levelLabel, nodeContextLabel } from '../lib/structure'
 import { getPDiagram } from '../lib/pdiagram'
 import { helpFor, type FieldKey } from '../lib/help'
 import FieldHelp from './FieldHelp'
@@ -23,6 +23,10 @@ export default function FailureEditor({ fmea }: { fmea: Fmea }) {
 
   const modesOfFunction = project.failureModes.filter((m) => m.functionId === functionId)
   const selectedMode = project.failureModes.find((m) => m.id === modeId) ?? null
+  // FE/FC 열 헤더에 붙일 소속 표기: "노드 소속 · 선택 FM". 선택 FM이 있을 때만.
+  const fmContext = selectedMode
+    ? `${nodeContextLabel(project.structure, nodeOfFunction(project, selectedMode.functionId) ?? '', project.meta.type)} · ${truncate(selectedMode.text, 24)}`
+    : undefined
 
   if (project.functions.length === 0) {
     return (
@@ -34,49 +38,90 @@ export default function FailureEditor({ fmea }: { fmea: Fmea }) {
 
   return (
     <div className="grid max-w-5xl grid-cols-3 gap-4">
-      {/* 1열: 기능 → FM */}
+      {/* 1열: 기능 → FM — 구조 노드별 그룹(트리 순서), 기능 있는 노드만 헤더 표시 */}
       <Column title="기능 → 고장모드(FM)" helpKey="fm">
-        <ul className="space-y-0.5">
-          {project.functions.map((f) => {
-            const node = project.structure.find((n) => n.id === f.structureNodeId)
-            const fmCount = project.failureModes.filter((m) => m.functionId === f.id).length
-            const active = f.id === functionId
+        <div className="space-y-2">
+          {flattenTree(project.structure).map((node) => {
+            const funcs = project.functions.filter((f) => f.structureNodeId === node.id)
+            if (funcs.length === 0) return null
             return (
-              <li key={f.id}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFunctionId(f.id)
-                    setModeId(null)
-                  }}
-                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm ${
-                    active ? 'bg-blue-600 text-white' : 'hover:bg-gray-100'
-                  }`}
-                >
-                  <span className="flex-1">
-                    {node && (
-                      <span
-                        className={`mr-1 text-xs ${active ? 'text-blue-100' : 'text-gray-400'}`}
-                      >
-                        [{node.name || levelLabel(project.meta.type, node.level)}]
-                      </span>
-                    )}
-                    {f.text}
+              <div key={node.id}>
+                {/* 그룹 헤더: 레벨 라벨 + 노드 소속(1 System=이름, 2+ =경로) */}
+                <div className="flex items-baseline gap-1.5 px-1 pb-0.5 text-xs">
+                  <span className="rounded bg-gray-100 px-1.5 py-0.5 font-medium text-gray-500">
+                    {levelLabel(project.meta.type, node.level)}
                   </span>
-                  {fmCount > 0 && (
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                        active ? 'bg-white/20 text-white' : 'bg-rose-50 text-rose-600'
-                      }`}
-                    >
-                      FM {fmCount}
-                    </span>
-                  )}
-                </button>
-              </li>
+                  <span className="font-semibold text-gray-700">
+                    {nodeContextLabel(project.structure, node.id, project.meta.type)}
+                  </span>
+                </div>
+                <ul className="space-y-0.5">
+                  {funcs.map((f) => {
+                    const fmCount = project.failureModes.filter((m) => m.functionId === f.id).length
+                    const active = f.id === functionId
+                    return (
+                      <li key={f.id}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFunctionId(f.id)
+                            setModeId(null)
+                          }}
+                          className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm ${
+                            active ? 'bg-blue-600 text-white' : 'hover:bg-gray-100'
+                          }`}
+                        >
+                          <span className="flex-1">{f.text}</span>
+                          {fmCount > 0 && (
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                                active ? 'bg-white/20 text-white' : 'bg-rose-50 text-rose-600'
+                              }`}
+                            >
+                              FM {fmCount}
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
             )
           })}
-        </ul>
+          {/* 방어: 트리에 없는 노드를 참조하는 기능도 숨기지 않는다 */}
+          {(() => {
+            const known = new Set(project.structure.map((n) => n.id))
+            const orphans = project.functions.filter((f) => !known.has(f.structureNodeId))
+            if (orphans.length === 0) return null
+            return (
+              <div>
+                <div className="px-1 pb-0.5 text-xs font-semibold text-gray-400">(소속 없음)</div>
+                <ul className="space-y-0.5">
+                  {orphans.map((f) => {
+                    const active = f.id === functionId
+                    return (
+                      <li key={f.id}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFunctionId(f.id)
+                            setModeId(null)
+                          }}
+                          className={`flex w-full rounded-md px-2 py-1 text-left text-sm ${
+                            active ? 'bg-blue-600 text-white' : 'hover:bg-gray-100'
+                          }`}
+                        >
+                          {f.text}
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            )
+          })()}
+        </div>
 
         {functionId && (
           <div className="mt-3 border-t border-gray-100 pt-3">
@@ -132,7 +177,7 @@ export default function FailureEditor({ fmea }: { fmea: Fmea }) {
       </Column>
 
       {/* 2열: FE */}
-      <Column title="영향 FE" hint="상위 레벨에 대한 영향" helpKey="fe">
+      <Column title="영향 FE" hint="상위 레벨에 대한 영향" helpKey="fe" context={fmContext}>
         {!selectedMode ? (
           <Empty text="왼쪽에서 고장모드(FM)를 선택하세요." />
         ) : (
@@ -150,7 +195,7 @@ export default function FailureEditor({ fmea }: { fmea: Fmea }) {
       </Column>
 
       {/* 3열: FC */}
-      <Column title="원인 FC" hint="하위 레벨 원인" helpKey="fc">
+      <Column title="원인 FC" hint="하위 레벨 원인" helpKey="fc" context={fmContext}>
         {!selectedMode ? (
           <Empty text="왼쪽에서 고장모드(FM)를 선택하세요." />
         ) : (
@@ -183,11 +228,13 @@ function Column({
   title,
   hint,
   helpKey,
+  context,
   children,
 }: {
   title: string
   hint?: string
   helpKey?: FieldKey
+  context?: string
   children: React.ReactNode
 }) {
   return (
@@ -196,6 +243,11 @@ function Column({
         {title}
         {hint && <span className="ml-1 text-xs font-normal text-gray-400">· {hint}</span>}
       </h3>
+      {context && (
+        <div className="mt-0.5 truncate text-xs text-blue-600" title={context}>
+          ↳ {context}
+        </div>
+      )}
       {helpKey && (
         <div className="mt-1">
           <FieldHelp k={helpKey} />
@@ -290,4 +342,8 @@ function DeleteBtn({ onClick }: { onClick: () => void }) {
 
 function Empty({ text }: { text: string }) {
   return <p className="text-sm text-gray-400">{text}</p>
+}
+
+function truncate(s: string, max: number): string {
+  return s.length > max ? s.slice(0, max - 1) + '…' : s
 }

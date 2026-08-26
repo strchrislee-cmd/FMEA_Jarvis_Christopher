@@ -45,6 +45,38 @@ export function childrenOf(
   return nodes.filter((n) => n.parentId === parentId)
 }
 
+// 트리 pre-order(루트→자식) 평탄화 — Step 2 트리와 동일한 노드 순서.
+export function flattenTree(nodes: StructureNode[]): StructureNode[] {
+  const out: StructureNode[] = []
+  const walk = (parentId: string | null) => {
+    for (const n of childrenOf(nodes, parentId)) {
+      out.push(n)
+      walk(n.id)
+    }
+  }
+  walk(null)
+  return out
+}
+
+// 조상 경로 문자열: "System › Subsystem › Component" (비어있는 슬롯 제외).
+export function structurePathString(nodes: StructureNode[], nodeId: string): string {
+  return structurePath(nodes, nodeId).filter(Boolean).join(' › ')
+}
+
+// 화면 표기용 노드 소속 라벨: System이 1개면 노드명만, 2개 이상이면 전체 경로.
+// (구분 모호성이 생길 때만 길어지게.) 이름이 비면 레벨 라벨로 폴백.
+export function nodeContextLabel(
+  nodes: StructureNode[],
+  nodeId: string,
+  type: FmeaType,
+): string {
+  const node = nodes.find((n) => n.id === nodeId)
+  if (!node) return ''
+  const multiSystem = nodes.filter((n) => n.level === 0).length >= 2
+  if (multiSystem) return structurePathString(nodes, nodeId) || levelLabel(type, node.level)
+  return node.name || levelLabel(type, node.level)
+}
+
 // 노드 자신 + 모든 자손의 id 집합
 function collectSubtreeIds(nodes: StructureNode[], rootId: string): Set<string> {
   const ids = new Set<string>([rootId])

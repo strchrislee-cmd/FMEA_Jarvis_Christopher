@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { OptStatus } from '../types/fmea'
 import type { useFmea } from '../state/useFmea'
 import { buildRiskRows, RATINGS, type RiskRow } from '../lib/risk'
+import { nodeContextLabel } from '../lib/structure'
 import { OPT_STATUS_LABELS, postAP, postRPN } from '../lib/optimization'
 import { helpFor, type FieldKey } from '../lib/help'
 import FieldHelp from './FieldHelp'
@@ -31,6 +32,8 @@ export default function OptimizationEditor({ fmea }: { fmea: Fmea }) {
             const optCount = project.optimizations.filter(
               (o) => o.failureCauseId === r.fc.id,
             ).length
+            const nodeId = project.functions.find((f) => f.id === r.fm.functionId)?.structureNodeId
+            const nodeLabel = nodeId ? nodeContextLabel(project.structure, nodeId, project.meta.type) : ''
             const active = key === rowKey
             return (
               <li key={key}>
@@ -42,6 +45,9 @@ export default function OptimizationEditor({ fmea }: { fmea: Fmea }) {
                   }`}
                 >
                   <span className="flex-1 truncate">
+                    {nodeLabel && (
+                      <span className={active ? 'text-blue-100' : 'text-gray-400'}>[{nodeLabel}] </span>
+                    )}
                     {r.fm.text} · {r.fe.text} · {r.fc.text}
                   </span>
                   <span className={active ? 'text-blue-100' : 'text-gray-400'}>
