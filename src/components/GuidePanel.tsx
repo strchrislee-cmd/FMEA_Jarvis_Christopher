@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { STEPS, step1Example, type Step1Example } from '../lib/steps'
+import { EXAMPLE_THREAD_NOTE, STEPS, step1Example, type Step1Example } from '../lib/steps'
 import type { useFmea } from '../state/useFmea'
 
 type Fmea = ReturnType<typeof useFmea>
@@ -32,14 +32,19 @@ export default function GuidePanel({ fmea }: Props) {
         {showExample ? '예시 숨기기' : '예시 보기'}
       </button>
 
-      {showExample &&
-        (isStep1 ? (
-          <Step1ExampleView fmea={fmea} type={fmeaType} />
-        ) : (
-          <div className="mt-3 rounded-md border border-blue-100 bg-blue-50 p-3 text-sm leading-relaxed text-gray-700">
-            {step.example(fmeaType)}
-          </div>
-        ))}
+      {showExample && (
+        <>
+          {isStep1 ? (
+            <Step1ExampleView fmea={fmea} type={fmeaType} />
+          ) : (
+            <div className="mt-3 rounded-md border border-blue-100 bg-blue-50 p-3 text-sm leading-relaxed text-gray-700">
+              {step.example(fmeaType)}
+            </div>
+          )}
+          {/* 예시가 Step 1~7을 관통하는 하나의 사례임을 표시 */}
+          <p className="mt-2 text-[11px] leading-snug text-blue-500">{EXAMPLE_THREAD_NOTE}</p>
+        </>
+      )}
     </aside>
   )
 }

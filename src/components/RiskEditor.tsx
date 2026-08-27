@@ -123,13 +123,14 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => {
+                {rows.map((r, idx) => {
                   const safety = isSafetyRow(r.s)
-                  const rowBg = safety ? 'bg-rose-50' : ''
+                  // 레코드 배경: 안전=rose, 그 외 교차 톤(레코드 단위로 두 줄 함께).
+                  const rowTint = safety ? 'bg-rose-50' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/70'
                   return (
                     <Fragment key={`${r.fe.id}-${r.fm.id}-${r.fc.id}`}>
-                      {/* 메인 행: 비교용 지표 (구조/FM/FE/S/FC/O/D/RPN/AP) */}
-                      <tr className={`border-t border-gray-200 ${rowBg}`}>
+                      {/* 메인 행: 비교용 지표. border-t-2 = 레코드 경계(굵은 구분선) */}
+                      <tr className={`border-t-2 border-gray-300 ${rowTint}`}>
                         <Td>
                           <div className="line-clamp-2 break-words text-xs text-gray-500" title={nodeLabelForFm(project, r.fm.functionId)}>
                             {nodeLabelForFm(project, r.fm.functionId)}
@@ -196,13 +197,15 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
                           <ApCell entry={r.rpn == null ? undefined : lookupAp(project.apTable, r.s!, r.o!, r.d!)} rpn={r.rpn} />
                         </Td>
                       </tr>
-                      {/* 관리 sub-row: 예방/검출 관리 입력을 full-width로 내려 판독 가능한 폭 확보 */}
-                      <tr className={safety ? 'bg-rose-50' : 'bg-gray-50/50'}>
-                        <td colSpan={9} className="px-2 pb-2 pt-0">
-                          <div className="flex flex-wrap gap-x-4 gap-y-1.5 pl-1">
-                            <div className="min-w-0 flex-1 basis-64">
-                              <div className="mb-0.5 flex items-center gap-2 text-[11px] text-gray-500">
-                                <span className="font-medium">예방관리 (→O)</span>
+                      {/* 관리 sub-row: 같은 레코드(경계선 없음, 동일 톤). 예방관리→O / 검출관리→D 를
+                          라벨과 현재 점수 칩으로 짝지어 표시(52px O/D 칼럼 밑 정렬은 입력폭상 불가 → 대안). */}
+                      <tr className={rowTint}>
+                        <td colSpan={9} className="@container px-2 pb-2 pt-0">
+                          <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 pl-1 @[720px]:grid-cols-2">
+                            <div className="min-w-0 rounded-md border-l-2 border-sky-200 pl-2">
+                              <div className="mb-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-gray-500">
+                                <span className="font-medium">예방관리</span>
+                                <span className="rounded bg-sky-50 px-1 font-semibold text-sky-700">→ 발생도 O {r.o ?? '—'}</span>
                                 <PdImportSelect
                                   label="◇ Control Factor에서 가져오기"
                                   items={controlsForFm(project, r.fm.functionId)}
@@ -222,8 +225,11 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
                                 />
                               </div>
                             </div>
-                            <div className="min-w-0 flex-1 basis-64">
-                              <div className="mb-0.5 text-[11px] font-medium text-gray-500">검출관리 (→D)</div>
+                            <div className="min-w-0 rounded-md border-l-2 border-violet-200 pl-2">
+                              <div className="mb-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-gray-500">
+                                <span className="font-medium">검출관리</span>
+                                <span className="rounded bg-violet-50 px-1 font-semibold text-violet-700">→ 검출도 D {r.d ?? '—'}</span>
+                              </div>
                               <CellInput
                                 value={r.fc.detectionControl ?? ''}
                                 onChange={(v) => fmea.patchCause(r.fc.id, { detectionControl: v })}
