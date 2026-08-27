@@ -636,12 +636,13 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
                   <text x={p.x + 14} y={p.y + 46} fontFamily="ui-monospace, monospace" fontSize={10} fill="#94a3b8" style={{ pointerEvents: 'none' }}>
                     {levelLabel(type, inDrill ? 2 : 1).toUpperCase()}
                   </text>
-                  {/* Component 개수 배지 + 진입 힌트(최상위 Subsystem에만) */}
+                  {/* Component 개수 배지(×N) + 진입 힌트(최상위 Subsystem에만). hover 툴팁=SVG <title> */}
                   {!inDrill && childCount > 0 && (
-                    <g style={{ pointerEvents: 'none' }}>
+                    <g>
+                      <title>{`${levelLabel(type, 2)} ${childCount}개`}</title>
                       <rect x={p.x + BLOCK.w - 42} y={p.y + 8} width={34} height={16} rx={8} fill="#eff6ff" stroke="#bfdbfe" />
                       <text x={p.x + BLOCK.w - 25} y={p.y + 20} textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize={10} fontWeight={600} fill="#2563eb">
-                        C {childCount}
+                        ×{childCount}
                       </text>
                     </g>
                   )}

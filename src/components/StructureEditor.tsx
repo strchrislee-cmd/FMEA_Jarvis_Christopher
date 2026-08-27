@@ -148,10 +148,10 @@ function TreeNode({ node, fmea }: { node: StructureNode; fmea: Fmea }) {
         )}
         {funcCount > 0 && (
           <span
-            title="연결된 기능 수"
-            className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600"
+            title={`연결된 기능 ${funcCount}개`}
+            className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium tabular-nums text-blue-600"
           >
-            fn {funcCount}
+            ×{funcCount}
           </span>
         )}
         {canAddChild && (

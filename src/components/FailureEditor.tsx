@@ -124,11 +124,12 @@ export default function FailureEditor({ fmea }: { fmea: Fmea }) {
                           <span className="flex-1">{f.text}</span>
                           {fmCount > 0 && (
                             <span
-                              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                              title={`고장모드 ${fmCount}개`}
+                              className={`rounded-full px-2 py-0.5 text-xs font-medium tabular-nums ${
                                 active ? 'bg-white/20 text-white' : 'bg-rose-50 text-rose-600'
                               }`}
                             >
-                              FM {fmCount}
+                              ×{fmCount}
                             </span>
                           )}
                         </button>

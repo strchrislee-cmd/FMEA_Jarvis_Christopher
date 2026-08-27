@@ -139,11 +139,12 @@ function SelectableNode({
         <span className="flex-1 truncate">{node.name || '이름 없음'}</span>
         {funcCount > 0 && (
           <span
-            className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+            title={`연결된 기능 ${funcCount}개`}
+            className={`rounded-full px-2 py-0.5 text-xs font-medium tabular-nums ${
               active ? 'bg-white/20 text-white' : 'bg-blue-50 text-blue-600'
             }`}
           >
-            fn {funcCount}
+            ×{funcCount}
           </span>
         )}
       </button>
