@@ -33,6 +33,7 @@ const RISK_HELP: [string, FieldKey][] = [
   [SOD_LABELS.D, 'detection'],
   ['예방관리', 'prevention'],
   ['검출관리', 'detectionControl'],
+  ['RPN', 'rpn'],
 ]
 // RPN 구간 → 색상 클래스·라벨(색상만으로 정보 전달 금지: 값+라벨 병행).
 const BAND_STYLE: Record<RpnBand, { cls: string; label: string }> = {
@@ -76,13 +77,13 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
             AP 조합표가 비어 있어 AP가 “미설정”으로 표시됩니다 — 아래 AP 조합표에서 “사내 기본값 불러오기”를 눌러 채우세요.
           </p>
         )}
-        {/* S/O/D · 예방/검출관리 도움말 범례 */}
-        <div className="mb-3 space-y-1.5 rounded-md bg-gray-50 p-3">
+        {/* 축약된 도움말 범례: 한 줄 요약 + ?(상세는 팝오버). 표 영역 확보 위해 compact flex-wrap. */}
+        <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 rounded-md bg-gray-50 px-3 py-2">
           {RISK_HELP.map(([label, k]) => (
-            <div key={k} className="flex items-start gap-2">
-              <span className="w-20 shrink-0 text-xs font-semibold text-gray-600">{label}</span>
+            <span key={k} className="inline-flex items-baseline gap-1">
+              <span className="text-xs font-semibold text-gray-600">{label}</span>
               <FieldHelp k={k} />
-            </div>
+            </span>
           ))}
         </div>
         {rows.length === 0 ? (
