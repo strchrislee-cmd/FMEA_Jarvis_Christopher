@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import type { FmeaProject, FmeaType, RiskMethod } from '../types/fmea'
+import type { FmeaProject, FmeaType } from '../types/fmea'
 
 interface Props {
   project: FmeaProject
@@ -39,7 +39,6 @@ export default function Toolbar({ project, onMeta, onImport }: Props) {
   }
 
   const types: FmeaType[] = ['DFMEA', 'PFMEA']
-  const methods: RiskMethod[] = ['RPN', 'AP']
 
   return (
     <header className="flex flex-wrap items-center gap-4 border-b border-gray-200 bg-white px-4 py-3">
@@ -51,17 +50,13 @@ export default function Toolbar({ project, onMeta, onImport }: Props) {
         className="min-w-48 flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm outline-none focus:border-blue-500"
       />
 
+      {/* 리스크 방식(RPN/AP) 토글은 제거 — 두 지표를 항상 함께 표시한다.
+          riskMethod 필드는 모델에 유지(저장/JSON/Excel 참조 파급 방지). */}
       <ToggleGroup
         label="유형"
         options={types}
         value={project.meta.type}
         onChange={(v) => onMeta({ type: v })}
-      />
-      <ToggleGroup
-        label="리스크"
-        options={methods}
-        value={project.meta.riskMethod}
-        onChange={(v) => onMeta({ riskMethod: v })}
       />
 
       <div className="ml-auto flex gap-2">

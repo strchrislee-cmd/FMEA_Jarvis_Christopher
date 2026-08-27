@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { Fragment, useRef, useState } from 'react'
 import type { ApEntry, ApLevel, FmeaType } from '../types/fmea'
 import type { useFmea } from '../state/useFmea'
 import { buildRiskRows, isSafetyRow, lookupAp, RATINGS, rpnBand, type RpnBand } from '../lib/risk'
@@ -67,11 +67,13 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
         <h3 className="mb-1 text-sm font-medium text-gray-700">
           리스크 행 (FE × FM × FC) — S/O/D 셀은 참조 FE·FC에 저장됩니다
         </h3>
-        <p className="mb-2 text-xs text-gray-400">{RPN_HINT}</p>
-        {/* AP 모드인데 조합표가 비어 있으면 안내 */}
-        {project.meta.riskMethod === 'AP' && apEmpty && (
+        <p className="mb-2 text-xs text-gray-400">
+          {RPN_HINT} · RPN·AP 두 지표를 항상 함께 표시합니다.
+        </p>
+        {/* AP 조합표가 비어 있으면 안내(리스크 방식 무관, 항상). 임의 AP 생성 없음 → "미설정" 유지. */}
+        {apEmpty && (
           <p className="mb-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
-            AP 조합표가 설정되지 않았습니다 — 척도표 화면에서 불러오거나 RPN 모드를 사용하세요.
+            AP 조합표가 비어 있어 AP가 “미설정”으로 표시됩니다 — 아래 AP 조합표에서 “사내 기본값 불러오기”를 눌러 채우세요.
           </p>
         )}
         {/* S/O/D · 예방/검출관리 도움말 범례 */}
@@ -92,18 +94,18 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
           // overflow 컨테이너를 두지 않아 헤더 sticky가 본문 스크롤(main)에 붙는다.
           <div className="rounded-lg border border-gray-200">
             <table className="w-full table-fixed text-sm">
+              {/* 관리 입력(예방/검출)은 각 레코드의 2번째 줄로 내려 폭을 확보(옵션 a).
+                  메인 행은 9컬럼 → AP까지 가로 스크롤 없이 들어옴. FC를 가장 넓게(행 구분 기여). */}
               <colgroup>
-                <col style={{ width: '72px' }} />{/* 구조 */}
-                <col />{/* FM (남는 폭 분배) */}
-                <col />{/* FE */}
-                <col style={{ width: '50px' }} />{/* S */}
-                <col />{/* FC */}
-                <col style={{ width: '88px' }} />{/* 예방관리 */}
-                <col style={{ width: '50px' }} />{/* O */}
-                <col style={{ width: '88px' }} />{/* 검출관리 */}
-                <col style={{ width: '50px' }} />{/* D */}
-                <col style={{ width: '72px' }} />{/* RPN */}
-                <col style={{ width: '84px' }} />{/* AP */}
+                <col style={{ width: '84px' }} />{/* 구조 */}
+                <col style={{ width: '14%' }} />{/* FM */}
+                <col style={{ width: '14%' }} />{/* FE */}
+                <col style={{ width: '52px' }} />{/* S */}
+                <col />{/* FC — 남는 폭(항상 가장 넓게: 행 구분 기여) */}
+                <col style={{ width: '52px' }} />{/* O */}
+                <col style={{ width: '52px' }} />{/* D */}
+                <col style={{ width: '74px' }} />{/* RPN */}
+                <col style={{ width: '86px' }} />{/* AP */}
               </colgroup>
               <thead className="bg-gray-50 text-xs text-gray-500">
                 <tr>
@@ -112,9 +114,7 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
                   <Th>영향 FE</Th>
                   <Th>{SOD_LABELS.S}</Th>
                   <Th>원인 FC</Th>
-                  <Th>예방관리</Th>
                   <Th>{SOD_LABELS.O}</Th>
-                  <Th>검출관리</Th>
                   <Th>{SOD_LABELS.D}</Th>
                   <Th>
                     <span title={RPN_HINT}>RPN ⓘ</span>
@@ -125,113 +125,122 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
               <tbody>
                 {rows.map((r) => {
                   const safety = isSafetyRow(r.s)
+                  const rowBg = safety ? 'bg-rose-50' : ''
                   return (
-                  <tr
-                    key={`${r.fe.id}-${r.fm.id}-${r.fc.id}`}
-                    className={`border-t border-gray-100 ${safety ? 'bg-rose-50' : ''}`}
-                  >
-                    <Td>
-                      <div className="line-clamp-2 break-words text-xs text-gray-500" title={nodeLabelForFm(project, r.fm.functionId)}>
-                        {nodeLabelForFm(project, r.fm.functionId)}
-                      </div>
-                    </Td>
-                    <Td>
-                      <div className="line-clamp-2 break-words" title={r.fm.text}>
-                        {safety && (
-                          <span
-                            title={`안전/법규 관련(S=${r.s}) — RPN과 무관하게 우선 검토`}
-                            className="mr-1 inline-flex items-center rounded bg-rose-600 px-1 py-0.5 text-[10px] font-bold text-white align-middle"
-                          >
-                            ⚠ 안전
-                          </span>
-                        )}
-                        {r.fm.text}
-                      </div>
-                    </Td>
-                    <Td>
-                      <div className="line-clamp-2 break-words" title={r.fe.text}>{r.fe.text}</div>
-                    </Td>
-                    <Td>
-                      <RatingSelect
-                        value={r.s}
-                        onChange={(v) => {
-                          fmea.setEffectSeverity(r.fe.id, v)
-                          if (v) showScaleToast('S', v)
-                        }}
-                      />
-                    </Td>
-                    <Td>
-                      <div className="line-clamp-2 break-words" title={r.fc.text}>{r.fc.text}</div>
-                    </Td>
-                    <Td>
-                      {/* P-Diagram Control Factor에서 가져오기(pull) — 같은 노드 한정 */}
-                      <PdImportSelect
-                        label="◇ Control Factor에서 가져오기"
-                        items={controlsForFm(project, r.fm.functionId)}
-                        onPick={(it) =>
-                          fmea.patchCause(r.fc.id, { prevention: it.text, preventionControlId: it.id })
-                        }
-                      />
-                      <div className="mt-1 flex items-center gap-1">
-                        {r.fc.preventionControlId && (
-                          <span title="P-Diagram Control Factor에서 가져옴" className="shrink-0 text-xs text-amber-600">
-                            ◇
-                          </span>
-                        )}
-                        <CellInput
-                          value={r.fc.prevention ?? ''}
-                          onChange={(v) => fmea.patchCause(r.fc.id, { prevention: v })}
-                          placeholder={helpFor('prevention').placeholder}
-                        />
-                      </div>
-                    </Td>
-                    <Td>
-                      <RatingSelect
-                        value={r.o}
-                        onChange={(v) => {
-                          fmea.patchCause(r.fc.id, { occurrence: v })
-                          if (v) showScaleToast('O', v)
-                        }}
-                      />
-                    </Td>
-                    <Td>
-                      <CellInput
-                        value={r.fc.detectionControl ?? ''}
-                        onChange={(v) => fmea.patchCause(r.fc.id, { detectionControl: v })}
-                        placeholder={helpFor('detectionControl').placeholder}
-                      />
-                    </Td>
-                    <Td>
-                      <RatingSelect
-                        value={r.d}
-                        onChange={(v) => {
-                          fmea.patchCause(r.fc.id, { detection: v })
-                          if (v) showScaleToast('D', v)
-                        }}
-                      />
-                    </Td>
-                    <Td>
-                      {r.rpn == null ? (
-                        <span className="text-gray-300">—</span>
-                      ) : (
-                        <span
-                          className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-medium ${BAND_STYLE[rpnBand(r.rpn)].cls}`}
-                        >
-                          {r.rpn} · {BAND_STYLE[rpnBand(r.rpn)].label}
-                        </span>
-                      )}
-                    </Td>
-                    <Td>
-                      <ApCell entry={r.rpn == null ? undefined : lookupAp(project.apTable, r.s!, r.o!, r.d!)} rpn={r.rpn} />
-                    </Td>
-                  </tr>
+                    <Fragment key={`${r.fe.id}-${r.fm.id}-${r.fc.id}`}>
+                      {/* 메인 행: 비교용 지표 (구조/FM/FE/S/FC/O/D/RPN/AP) */}
+                      <tr className={`border-t border-gray-200 ${rowBg}`}>
+                        <Td>
+                          <div className="line-clamp-2 break-words text-xs text-gray-500" title={nodeLabelForFm(project, r.fm.functionId)}>
+                            {nodeLabelForFm(project, r.fm.functionId)}
+                          </div>
+                        </Td>
+                        <Td>
+                          <div className="line-clamp-2 break-words" title={r.fm.text}>
+                            {safety && (
+                              <span
+                                title={`안전/법규 관련(S=${r.s}) — RPN과 무관하게 우선 검토`}
+                                className="mr-1 inline-flex items-center rounded bg-rose-600 px-1 py-0.5 text-[10px] font-bold text-white align-middle"
+                              >
+                                ⚠ 안전
+                              </span>
+                            )}
+                            {r.fm.text}
+                          </div>
+                        </Td>
+                        <Td>
+                          <div className="line-clamp-2 break-words" title={r.fe.text}>{r.fe.text}</div>
+                        </Td>
+                        <Td>
+                          <RatingSelect
+                            value={r.s}
+                            onChange={(v) => {
+                              fmea.setEffectSeverity(r.fe.id, v)
+                              if (v) showScaleToast('S', v)
+                            }}
+                          />
+                        </Td>
+                        <Td>
+                          <div className="line-clamp-2 break-words font-medium text-gray-800" title={r.fc.text}>{r.fc.text}</div>
+                        </Td>
+                        <Td>
+                          <RatingSelect
+                            value={r.o}
+                            onChange={(v) => {
+                              fmea.patchCause(r.fc.id, { occurrence: v })
+                              if (v) showScaleToast('O', v)
+                            }}
+                          />
+                        </Td>
+                        <Td>
+                          <RatingSelect
+                            value={r.d}
+                            onChange={(v) => {
+                              fmea.patchCause(r.fc.id, { detection: v })
+                              if (v) showScaleToast('D', v)
+                            }}
+                          />
+                        </Td>
+                        <Td>
+                          {r.rpn == null ? (
+                            <span className="text-gray-300">—</span>
+                          ) : (
+                            <span
+                              className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-medium ${BAND_STYLE[rpnBand(r.rpn)].cls}`}
+                            >
+                              {r.rpn} · {BAND_STYLE[rpnBand(r.rpn)].label}
+                            </span>
+                          )}
+                        </Td>
+                        <Td>
+                          <ApCell entry={r.rpn == null ? undefined : lookupAp(project.apTable, r.s!, r.o!, r.d!)} rpn={r.rpn} />
+                        </Td>
+                      </tr>
+                      {/* 관리 sub-row: 예방/검출 관리 입력을 full-width로 내려 판독 가능한 폭 확보 */}
+                      <tr className={safety ? 'bg-rose-50' : 'bg-gray-50/50'}>
+                        <td colSpan={9} className="px-2 pb-2 pt-0">
+                          <div className="flex flex-wrap gap-x-4 gap-y-1.5 pl-1">
+                            <div className="min-w-0 flex-1 basis-64">
+                              <div className="mb-0.5 flex items-center gap-2 text-[11px] text-gray-500">
+                                <span className="font-medium">예방관리 (→O)</span>
+                                <PdImportSelect
+                                  label="◇ Control Factor에서 가져오기"
+                                  items={controlsForFm(project, r.fm.functionId)}
+                                  onPick={(it) =>
+                                    fmea.patchCause(r.fc.id, { prevention: it.text, preventionControlId: it.id })
+                                  }
+                                />
+                              </div>
+                              <div className="flex items-center gap-1">
+                                {r.fc.preventionControlId && (
+                                  <span title="P-Diagram Control Factor에서 가져옴" className="shrink-0 text-xs text-amber-600">◇</span>
+                                )}
+                                <CellInput
+                                  value={r.fc.prevention ?? ''}
+                                  onChange={(v) => fmea.patchCause(r.fc.id, { prevention: v })}
+                                  placeholder={helpFor('prevention').placeholder}
+                                />
+                              </div>
+                            </div>
+                            <div className="min-w-0 flex-1 basis-64">
+                              <div className="mb-0.5 text-[11px] font-medium text-gray-500">검출관리 (→D)</div>
+                              <CellInput
+                                value={r.fc.detectionControl ?? ''}
+                                onChange={(v) => fmea.patchCause(r.fc.id, { detectionControl: v })}
+                                placeholder={helpFor('detectionControl').placeholder}
+                              />
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    </Fragment>
                   )
                 })}
               </tbody>
             </table>
           </div>
         )}
-        {project.meta.riskMethod === 'AP' && !apEmpty && (
+        {!apEmpty && (
           <p className="mt-1 text-xs text-gray-400">
             AP가 “미설정”이면 아래 AP 조합표에 해당 (S,O,D) 항목이 없는 것입니다.
           </p>
