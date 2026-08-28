@@ -64,8 +64,8 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
   const { project } = fmea
   const rows = buildRiskRows(project)
   const apEmpty = Object.keys(project.apTable).length === 0
-  // 표/카드 보기 전환(세션 UI, 저장 안 함).
-  const [view, setView] = useState<'table' | 'card'>('table')
+  // 표/카드 보기 전환(세션 UI, 저장 안 함). 기본=카드(표는 비교용으로 유지).
+  const [view, setView] = useState<'table' | 'card'>('card')
   // 척도 문구 조회(scales에서만; 값 없으면 빈 문자열, 문구 없으면 "기준 미정의").
   const scaleText = (dim: ScaleDim, value?: number) =>
     value == null ? '' : project.scales[project.meta.type][dim][value - 1]?.trim() || '기준 미정의'
