@@ -156,6 +156,11 @@ export interface Planning {
   team: TeamMember[] // 팀원 목록
 }
 
+// Step 7 품질 점검 설정(사용자 편집·프로젝트 저장). RPN 밴드색 임계와 별개.
+export interface ChecksConfig {
+  rpnActionBaseline: number // 조치 필요 판정 RPN 기준선(기본 100)
+}
+
 // ── 전역 상태 (FMEA 프로젝트 1건, 순수 도메인 데이터) ─
 // UI 커서(currentStep 등)는 포함하지 않는다 → 내보내는 JSON은 도메인 데이터만.
 export interface FmeaProject {
@@ -173,4 +178,5 @@ export interface FmeaProject {
   interfaces: Interface[] // 블록 간 인터페이스(평면+id)
   layout: Layout // 블록 배치 좌표(위성, 별도 섹션) — 도메인 배열과 독립
   pDiagrams: PDiagram[] // 블록 단위 P-Diagram(평면+id, structureNodeId로 노드 참조)
+  checks: ChecksConfig // Step 7 품질 점검 설정
 }

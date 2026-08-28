@@ -281,6 +281,12 @@ export function useFmea() {
     setProject((p) => ({ ...p, apTable: table }))
   }
 
+  // Step 7 품질 점검: RPN 조치 기준선(양수만 반영).
+  function setRpnBaseline(n: number) {
+    if (!Number.isFinite(n) || n <= 0) return
+    setProject((p) => ({ ...p, checks: { ...p.checks, rpnActionBaseline: n } }))
+  }
+
   // ── Step 6: Optimization (failureCauseId 앵커) ──
   function addOptimization(failureCauseId: string) {
     setProject((p) => ({
@@ -358,6 +364,7 @@ export function useFmea() {
     setApEntry,
     removeApEntry,
     setApTable,
+    setRpnBaseline,
     setNodePosition,
     addInterface,
     updateInterface,

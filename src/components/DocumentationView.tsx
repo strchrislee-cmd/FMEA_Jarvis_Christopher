@@ -1,13 +1,24 @@
 import type { useFmea } from '../state/useFmea'
 import { buildRiskRows } from '../lib/risk'
 import { exportExcel } from '../lib/excel'
+import { runChecks, type CheckResult, type CheckSeverity } from '../lib/checks'
 
 type Fmea = ReturnType<typeof useFmea>
+
+const SEV_STYLE: Record<CheckSeverity, string> = {
+  high: 'bg-rose-100 text-rose-700',
+  medium: 'bg-amber-100 text-amber-700',
+  low: 'bg-gray-100 text-gray-600',
+}
+const SEV_LABEL: Record<CheckSeverity, string> = { high: '높음', medium: '중간', low: '낮음' }
 
 // Step 7: Documentation — 새 편집 화면 없음. 전체 요약 + Excel 내보내기.
 export default function DocumentationView({ fmea }: { fmea: Fmea }) {
   const { project } = fmea
   const rows = buildRiskRows(project)
+  // 품질 점검(파생, 저장 안 함). 기준선은 project.checks에서.
+  const findings = runChecks(project, project.checks)
+  const totalViolations = findings.reduce((n, f) => n + f.items.length, 0)
 
   // 완성 행(RPN 산출 가능)만 대상으로 AP 분포 / RPN 상위
   const complete = rows.filter((r) => r.rpn != null)
@@ -87,6 +98,79 @@ export default function DocumentationView({ fmea }: { fmea: Fmea }) {
           </ol>
         )}
       </section>
+
+      {/* 품질 점검 — 순수 계산, 조치 관련 3개 항목만. "전부 통과 = 문제 없음" 오해 방지 문구 포함. */}
+      <section>
+        <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-medium text-gray-700">품질 점검</h3>
+          <label className="flex items-center gap-1 text-xs text-gray-500">
+            RPN 조치 기준선
+            <input
+              type="number"
+              min={1}
+              value={project.checks.rpnActionBaseline}
+              onChange={(e) => fmea.setRpnBaseline(Number(e.target.value))}
+              className="w-16 rounded-md border border-gray-300 px-2 py-1 text-sm"
+            />
+          </label>
+        </div>
+        <p className="mb-3 text-xs text-gray-400">
+          조치 관련 3개 항목만 자동 점검합니다 — 통과해도 FMEA 전체 품질을 보증하지는 않습니다.
+        </p>
+        <div className="space-y-2">
+          {findings.map((f) => (
+            <CheckCard key={f.ruleId} finding={f} onJump={(step) => fmea.goTo(step)} />
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-gray-500">
+          {totalViolations === 0
+            ? '점검한 3개 항목에서 위반 없음.'
+            : `점검 위반 합계 ${totalViolations}건.`}
+        </p>
+      </section>
+    </div>
+  )
+}
+
+function CheckCard({ finding, onJump }: { finding: CheckResult; onJump: (step: number) => void }) {
+  const pass = finding.items.length === 0
+  return (
+    <div className="rounded-lg border border-gray-200 p-3">
+      <div className="flex items-center gap-2">
+        <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${SEV_STYLE[finding.severity]}`}>
+          {SEV_LABEL[finding.severity]}
+        </span>
+        <span className="flex-1 text-sm font-medium text-gray-700">{finding.title}</span>
+        {pass ? (
+          <span className="shrink-0 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">통과</span>
+        ) : (
+          <span className="shrink-0 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-600">
+            {finding.items.length}건
+          </span>
+        )}
+      </div>
+      {!pass && (
+        <ul className="mt-2 space-y-1">
+          {finding.items.map((it) => (
+            <li
+              key={`${finding.ruleId}-${it.target.id}`}
+              className="flex items-start justify-between gap-2 rounded-md bg-gray-50 px-2 py-1.5 text-xs"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="line-clamp-1 text-gray-700">{it.label}</span>
+                <span className="text-gray-500">{it.note}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => onJump(it.target.step)}
+                className="shrink-0 rounded border border-gray-300 px-2 py-0.5 text-gray-600 hover:bg-gray-100"
+              >
+                Step 5로
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

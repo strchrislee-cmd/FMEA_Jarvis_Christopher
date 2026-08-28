@@ -49,6 +49,7 @@ export function createEmptyProject(): FmeaProject {
     interfaces: [],
     layout: {},
     pDiagrams: [],
+    checks: { rpnActionBaseline: 100 },
   }
 }
 
@@ -108,5 +109,11 @@ export function normalizeProject(raw: unknown): FmeaProject {
     interfaces: arr(p.interfaces),
     layout: obj(p.layout) as FmeaProject['layout'],
     pDiagrams,
+    checks: { rpnActionBaseline: normalizeBaseline(obj(p.checks).rpnActionBaseline) },
   }
+}
+
+// 점검 기준선 방어: 양수 아니면 기본 100.
+function normalizeBaseline(v: unknown): number {
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 100
 }
