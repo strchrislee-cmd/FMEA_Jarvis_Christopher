@@ -1,11 +1,11 @@
 import { Fragment, useRef, useState } from 'react'
 import type { ApEntry, ApLevel, FmeaType } from '../types/fmea'
 import type { useFmea } from '../state/useFmea'
-import { buildRiskRows, isSafetyRow, lookupAp, RATINGS, rpnBand, type RpnBand } from '../lib/risk'
+import { buildRiskRows, isSafetyRow, lookupAp, RATINGS, rpnBand, type RiskRow, type RpnBand } from '../lib/risk'
 import { getPDiagram } from '../lib/pdiagram'
 import { nodeContextLabel } from '../lib/structure'
 import { companyApPreset } from '../lib/apPreset'
-import { helpFor, RPN_HINT, SOD_LABELS, type FieldKey } from '../lib/help'
+import { helpFor, RPN_HINT, SOD_FULL, SOD_LABELS, type FieldKey } from '../lib/help'
 import { dfmeaScalePreset, DFMEA_SCALE_NOTE } from '../lib/scalePreset'
 import FieldHelp from './FieldHelp'
 import PdImportSelect from './PdImportSelect'
@@ -35,21 +35,40 @@ const RISK_HELP: [string, FieldKey][] = [
   ['검출관리', 'detectionControl'],
   ['RPN', 'rpn'],
 ]
-// RPN 구간 → 색상 클래스·라벨(색상만으로 정보 전달 금지: 값+라벨 병행).
-const BAND_STYLE: Record<RpnBand, { cls: string; label: string }> = {
-  low: { cls: 'bg-green-100 text-green-800', label: '낮음' },
-  mid: { cls: 'bg-orange-100 text-orange-800', label: '중간' },
-  high: { cls: 'bg-red-100 text-red-800', label: '높음' },
+// RPN 구간 → 색상·라벨·아이콘(색상만으로 정보 전달 금지: 값+라벨+아이콘 병행).
+// 아이콘은 막대 높이 은유(위험 클수록 높음) — 색약에도 낮음/중간/높음 구분.
+const BAND_STYLE: Record<RpnBand, { cls: string; label: string; icon: string }> = {
+  low: { cls: 'bg-green-100 text-green-800', label: '낮음', icon: '▁' },
+  mid: { cls: 'bg-orange-100 text-orange-800', label: '중간', icon: '▄' },
+  high: { cls: 'bg-red-100 text-red-800', label: '높음', icon: '█' },
 }
 // AP 등급 → 한국어·조치수준(사내 규칙: H=조치 필수 / M=조치 권고 / L=조치 선택).
 const AP_KO: Record<ApLevel, string> = { H: '높음', M: '중간', L: '낮음' }
 const AP_ACTION: Record<ApLevel, string> = { H: '조치 필수', M: '조치 권고', L: '조치 선택' }
+// AP 배지 색(H 적 / M 주황 / L 녹 — RPN 밴드색과 정합). RPN·AP를 같은 급 pill로.
+const AP_STYLE: Record<ApLevel, string> = {
+  H: 'bg-red-100 text-red-800',
+  M: 'bg-orange-100 text-orange-800',
+  L: 'bg-green-100 text-green-800',
+}
+// S/O/D 색: S 적 / O 주황 / D 보라. 관리-점수 대응을 같은 색으로 묶는다
+// (예방관리↔O 주황, 검출관리↔D 보라). 항상 라벨·수치 병행(색약 대응).
+const DIM_STYLE: Record<ScaleDim, { badge: string; border: string; text: string }> = {
+  S: { badge: 'bg-red-100 text-red-800', border: 'border-red-300', text: 'text-red-700' },
+  O: { badge: 'bg-orange-100 text-orange-800', border: 'border-orange-300', text: 'text-orange-700' },
+  D: { badge: 'bg-violet-100 text-violet-800', border: 'border-violet-300', text: 'text-violet-700' },
+}
 
 // Step 5: Risk Analysis — 파생 리스크 행(S/O/D 되쓰기) + 척도표 + AP 조합표
 export default function RiskEditor({ fmea }: { fmea: Fmea }) {
   const { project } = fmea
   const rows = buildRiskRows(project)
   const apEmpty = Object.keys(project.apTable).length === 0
+  // 표/카드 보기 전환(세션 UI, 저장 안 함).
+  const [view, setView] = useState<'table' | 'card'>('table')
+  // 척도 문구 조회(scales에서만; 값 없으면 빈 문자열, 문구 없으면 "기준 미정의").
+  const scaleText = (dim: ScaleDim, value?: number) =>
+    value == null ? '' : project.scales[project.meta.type][dim][value - 1]?.trim() || '기준 미정의'
 
   // 등급 선택 시 척도표 문구를 약 2초 토스트로 표시(연속 선택 시 교체). 문구는 scales에서만 읽는다.
   const [toast, setToast] = useState<string | null>(null)
@@ -65,9 +84,12 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
     <div className="max-w-6xl space-y-8">
       {/* 리스크 행 테이블 */}
       <section>
-        <h3 className="mb-1 text-sm font-medium text-gray-700">
-          리스크 행 (FE × FM × FC) — S/O/D 셀은 참조 FE·FC에 저장됩니다
-        </h3>
+        <div className="mb-1 flex items-start justify-between gap-3">
+          <h3 className="text-sm font-medium text-gray-700">
+            리스크 행 (FE × FM × FC) — S/O/D 셀은 참조 FE·FC에 저장됩니다
+          </h3>
+          {rows.length > 0 && <ViewToggle view={view} onChange={setView} />}
+        </div>
         <p className="mb-2 text-xs text-gray-400">
           {RPN_HINT} · RPN·AP 두 지표를 항상 함께 표시합니다.
         </p>
@@ -90,6 +112,23 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
           <p className="text-sm text-gray-400">
             Step 4에서 각 FM에 FE와 FC를 모두 추가하면 행이 자동 생성됩니다.
           </p>
+        ) : view === 'card' ? (
+          // 카드 보기: 레코드 1건을 세로로 전개(전문 표시). 세션 UI 전환, 계산·모델 불변.
+          <div className="space-y-3">
+            {rows.map((r) => (
+              <RiskCard
+                key={`${r.fe.id}-${r.fm.id}-${r.fc.id}`}
+                fmea={fmea}
+                r={r}
+                safety={isSafetyRow(r.s)}
+                nodeLabel={nodeLabelForFm(project, r.fm.functionId)}
+                controls={controlsForFm(project, r.fm.functionId)}
+                apEntry={r.rpn == null ? undefined : lookupAp(project.apTable, r.s!, r.o!, r.d!)}
+                scaleText={scaleText}
+                onScaleToast={showScaleToast}
+              />
+            ))}
+          </div>
         ) : (
           // 가로 스크롤 없이 화면 안에서 해결: table-fixed + colgroup 폭 배분.
           // overflow 컨테이너를 두지 않아 헤더 sticky가 본문 스크롤(main)에 붙는다.
@@ -101,10 +140,10 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
                 <col style={{ width: '84px' }} />{/* 구조 */}
                 <col style={{ width: '14%' }} />{/* FM */}
                 <col style={{ width: '14%' }} />{/* FE */}
-                <col style={{ width: '52px' }} />{/* S */}
+                <col style={{ width: '76px' }} />{/* S — 두 자리(10) 온전히(셀 패딩 제외 실폭 확보) */}
                 <col />{/* FC — 남는 폭(항상 가장 넓게: 행 구분 기여) */}
-                <col style={{ width: '52px' }} />{/* O */}
-                <col style={{ width: '52px' }} />{/* D */}
+                <col style={{ width: '76px' }} />{/* O */}
+                <col style={{ width: '76px' }} />{/* D */}
                 <col style={{ width: '74px' }} />{/* RPN */}
                 <col style={{ width: '86px' }} />{/* AP */}
               </colgroup>
@@ -139,14 +178,7 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
                         </Td>
                         <Td>
                           <div className="line-clamp-2 break-words" title={r.fm.text}>
-                            {safety && (
-                              <span
-                                title={`안전/법규 관련(S=${r.s}) — RPN과 무관하게 우선 검토`}
-                                className="mr-1 inline-flex items-center rounded bg-rose-600 px-1 py-0.5 text-[10px] font-bold text-white align-middle"
-                              >
-                                ⚠ 안전
-                              </span>
-                            )}
+                            {safety && <SafetyBadge s={r.s} />}
                             {r.fm.text}
                           </div>
                         </Td>
@@ -184,18 +216,10 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
                           />
                         </Td>
                         <Td>
-                          {r.rpn == null ? (
-                            <span className="text-gray-300">—</span>
-                          ) : (
-                            <span
-                              className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-medium ${BAND_STYLE[rpnBand(r.rpn)].cls}`}
-                            >
-                              {r.rpn} · {BAND_STYLE[rpnBand(r.rpn)].label}
-                            </span>
-                          )}
+                          <RpnPill rpn={r.rpn} />
                         </Td>
                         <Td>
-                          <ApCell entry={r.rpn == null ? undefined : lookupAp(project.apTable, r.s!, r.o!, r.d!)} rpn={r.rpn} />
+                          <ApPill entry={r.rpn == null ? undefined : lookupAp(project.apTable, r.s!, r.o!, r.d!)} rpn={r.rpn} />
                         </Td>
                       </tr>
                       {/* 관리 sub-row: 같은 레코드(경계선 없음, 동일 톤). 예방관리→O / 검출관리→D 를
@@ -203,10 +227,10 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
                       <tr className={rowTint}>
                         <td colSpan={9} className="@container px-2 pb-2 pt-0">
                           <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 pl-1 @[720px]:grid-cols-2">
-                            <div className="min-w-0 rounded-md border-l-2 border-sky-200 pl-2">
+                            <div className="min-w-0 rounded-md border-l-2 border-orange-200 pl-2">
                               <div className="mb-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-gray-500">
-                                <span className="font-medium">예방관리</span>
-                                <span className="rounded bg-sky-50 px-1 font-semibold text-sky-700">→ 발생도 O {r.o ?? '—'}</span>
+                                <span className="font-medium text-orange-700">예방관리</span>
+                                <span className="rounded bg-orange-50 px-1 font-semibold text-orange-700">→ 발생도 O {r.o ?? '—'}</span>
                                 <PdImportSelect
                                   label="◇ Control Factor에서 가져오기"
                                   items={controlsForFm(project, r.fm.functionId)}
@@ -228,7 +252,7 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
                             </div>
                             <div className="min-w-0 rounded-md border-l-2 border-violet-200 pl-2">
                               <div className="mb-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-gray-500">
-                                <span className="font-medium">검출관리</span>
+                                <span className="font-medium text-violet-700">검출관리</span>
                                 <span className="rounded bg-violet-50 px-1 font-semibold text-violet-700">→ 검출도 D {r.d ?? '—'}</span>
                               </div>
                               <CellInput
@@ -271,16 +295,249 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
   )
 }
 
-// AP 셀: 등급 + 조치수준 + (있으면) 사유 라벨. 라벨은 표에서 읽은 값만 — 없으면 등급만.
-function ApCell({ entry, rpn }: { entry: ApEntry | undefined; rpn: number | undefined }) {
+// 표/카드 공용 보기 전환 토글(세션 UI).
+function ViewToggle({ view, onChange }: { view: 'table' | 'card'; onChange: (v: 'table' | 'card') => void }) {
+  const btn = (v: 'table' | 'card', label: string) => (
+    <button
+      type="button"
+      onClick={() => onChange(v)}
+      className={`rounded-md px-3 py-1 text-xs font-medium ${
+        view === v ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+      }`}
+    >
+      {label}
+    </button>
+  )
+  return (
+    <div className="inline-flex shrink-0 rounded-lg bg-gray-100 p-0.5">
+      {btn('table', '표 보기')}
+      {btn('card', '카드 보기')}
+    </div>
+  )
+}
+
+// 안전/법규 배지(S=9·10). 표·카드 공용.
+function SafetyBadge({ s }: { s?: number }) {
+  return (
+    <span
+      title={`안전/법규 관련(S=${s}) — RPN과 무관하게 우선 검토`}
+      className="mr-1 inline-flex items-center rounded bg-rose-600 px-1 py-0.5 align-middle text-[10px] font-bold text-white"
+    >
+      ⚠ 안전
+    </span>
+  )
+}
+
+// RPN 라운드 배지(구간 색+라벨+아이콘 병행). RPN·AP를 같은 급 pill로 통일.
+function RpnPill({ rpn }: { rpn?: number }) {
+  if (rpn == null) return <span className="text-gray-300">—</span>
+  const b = BAND_STYLE[rpnBand(rpn)]
+  return (
+    <span
+      title={RPN_HINT}
+      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-semibold ${b.cls}`}
+    >
+      <span aria-hidden>{b.icon}</span>
+      {rpn} · {b.label}
+    </span>
+  )
+}
+
+// AP 라운드 배지: 등급 + 조치수준(사유 라벨은 그 아래 작은 글씨). 라벨은 표에서 읽은 값만.
+function ApPill({ entry, rpn }: { entry?: ApEntry; rpn?: number }) {
   if (rpn == null) return <span className="text-gray-300">—</span>
   if (!entry) return <span className="text-amber-600">미설정</span>
   return (
-    <div className="leading-tight" title={`${entry.ap} (${AP_KO[entry.ap]}) · ${AP_ACTION[entry.ap]}${entry.label ? ' · ' + entry.label : ''}`}>
-      <div className="break-words font-medium">
-        {entry.ap} ({AP_KO[entry.ap]}) · {AP_ACTION[entry.ap]}
+    <div className="leading-tight">
+      <span
+        title={`${entry.ap} (${AP_KO[entry.ap]}) · ${AP_ACTION[entry.ap]}`}
+        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-semibold ${AP_STYLE[entry.ap]}`}
+      >
+        {entry.ap} · {AP_ACTION[entry.ap]}
+      </span>
+      {entry.label && <div className="mt-0.5 break-words text-[11px] text-gray-500">{entry.label}</div>}
+    </div>
+  )
+}
+
+// 카드 헤더 완성도: S/O/D 기입 수(미기입 있으면 주황으로 눈에 띄게).
+function Completeness({ s, o, d }: { s?: number; o?: number; d?: number }) {
+  const filled = [s, o, d].filter((v) => v != null).length
+  const done = filled === 3
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+        done ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+      }`}
+    >
+      {done ? '✓ S/O/D 완성' : `S/O/D ${filled}/3 기입`}
+    </span>
+  )
+}
+
+// 카드: 관리/FE → 점수(같은 색)의 인과를 화살표로. 값 없으면 "미기입" 주황.
+function ScoreLine({
+  dim,
+  value,
+  scaleText,
+  children,
+}: {
+  dim: ScaleDim
+  value?: number
+  scaleText: string
+  children: React.ReactNode
+}) {
+  const st = DIM_STYLE[dim]
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-2">
+      {children}
+      <span aria-hidden className="text-gray-400">
+        →
+      </span>
+      {value == null ? (
+        <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+          {dim} 미기입
+        </span>
+      ) : (
+        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${st.badge}`}>
+          {dim}={value} · {SOD_FULL[dim]}
+        </span>
+      )}
+      {value != null && <span className={`text-xs ${st.text}`}>{scaleText}</span>}
+    </div>
+  )
+}
+
+// 카드 1건: 레코드를 세로로 전개(전문·말줄임 없음). 계산·모델 불변, 표시 전용.
+function RiskCard({
+  fmea,
+  r,
+  safety,
+  nodeLabel,
+  controls,
+  apEntry,
+  scaleText,
+  onScaleToast,
+}: {
+  fmea: Fmea
+  r: RiskRow
+  safety: boolean
+  nodeLabel: string
+  controls: ReturnType<typeof controlsForFm>
+  apEntry?: ApEntry
+  scaleText: (dim: ScaleDim, value?: number) => string
+  onScaleToast: (dim: ScaleDim, value: number) => void
+}) {
+  const tint = safety ? 'border-rose-300 bg-rose-50/40' : 'border-gray-200 bg-white'
+  return (
+    <div className={`rounded-lg border p-4 ${tint}`}>
+      {/* 헤더: 구조 경로 · FM(안전 배지) · 완성도 */}
+      <div className="flex flex-wrap items-start justify-between gap-2 border-b border-gray-200 pb-2">
+        <div className="min-w-0">
+          <div className="text-xs text-gray-500">{nodeLabel || '(소속 없음)'}</div>
+          <div className="break-words font-medium text-gray-900">
+            {safety && <SafetyBadge s={r.s} />}
+            {r.fm.text}
+          </div>
+        </div>
+        <Completeness s={r.s} o={r.o} d={r.d} />
       </div>
-      {entry.label && <div className="mt-0.5 line-clamp-2 break-words text-[11px] text-gray-500">{entry.label}</div>}
+
+      <div className="mt-3 space-y-3">
+        {/* 영향 FE → S(심각도, 적) */}
+        <div className={`rounded-md border-l-4 pl-3 ${DIM_STYLE.S.border}`}>
+          <div className="text-xs font-medium text-gray-500">영향 FE</div>
+          <div className="break-words text-sm text-gray-800">{r.fe.text || '—'}</div>
+          <ScoreLine dim="S" value={r.s} scaleText={scaleText('S', r.s)}>
+            <RatingSelect
+              className="w-20"
+              value={r.s}
+              onChange={(v) => {
+                fmea.setEffectSeverity(r.fe.id, v)
+                if (v) onScaleToast('S', v)
+              }}
+            />
+          </ScoreLine>
+        </div>
+
+        {/* 원인 FC (점수 없음) */}
+        <div className="rounded-md border-l-4 border-gray-200 pl-3">
+          <div className="text-xs font-medium text-gray-500">원인 FC</div>
+          <div className="break-words text-sm font-medium text-gray-800">{r.fc.text || '—'}</div>
+        </div>
+
+        {/* 예방관리 입력 → O(발생도, 주황) — 라벨·점수 같은 색으로 대응 */}
+        <div className={`rounded-md border-l-4 pl-3 ${DIM_STYLE.O.border}`}>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`text-xs font-semibold ${DIM_STYLE.O.text}`}>예방관리</span>
+            <FieldHelp k="prevention" />
+            <PdImportSelect
+              label="◇ Control Factor에서 가져오기"
+              items={controls}
+              onPick={(it) => fmea.patchCause(r.fc.id, { prevention: it.text, preventionControlId: it.id })}
+            />
+            {r.fc.preventionControlId && (
+              <span title="P-Diagram Control Factor에서 가져옴" className="text-xs text-amber-600">
+                ◇
+              </span>
+            )}
+          </div>
+          <div className="mt-1">
+            <CellInput
+              value={r.fc.prevention ?? ''}
+              onChange={(v) => fmea.patchCause(r.fc.id, { prevention: v })}
+              placeholder={helpFor('prevention').placeholder}
+            />
+          </div>
+          <ScoreLine dim="O" value={r.o} scaleText={scaleText('O', r.o)}>
+            <RatingSelect
+              className="w-20"
+              value={r.o}
+              onChange={(v) => {
+                fmea.patchCause(r.fc.id, { occurrence: v })
+                if (v) onScaleToast('O', v)
+              }}
+            />
+          </ScoreLine>
+        </div>
+
+        {/* 검출관리 입력 → D(검출도, 보라) — 라벨·점수 같은 색으로 대응 */}
+        <div className={`rounded-md border-l-4 pl-3 ${DIM_STYLE.D.border}`}>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`text-xs font-semibold ${DIM_STYLE.D.text}`}>검출관리</span>
+            <FieldHelp k="detectionControl" />
+          </div>
+          <div className="mt-1">
+            <CellInput
+              value={r.fc.detectionControl ?? ''}
+              onChange={(v) => fmea.patchCause(r.fc.id, { detectionControl: v })}
+              placeholder={helpFor('detectionControl').placeholder}
+            />
+          </div>
+          <ScoreLine dim="D" value={r.d} scaleText={scaleText('D', r.d)}>
+            <RatingSelect
+              className="w-20"
+              value={r.d}
+              onChange={(v) => {
+                fmea.patchCause(r.fc.id, { detection: v })
+                if (v) onScaleToast('D', v)
+              }}
+            />
+          </ScoreLine>
+        </div>
+      </div>
+
+      {/* 하단: RPN · AP (라운드 배지, 대등하게 나란히) */}
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-gray-200 pt-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-gray-500">RPN</span>
+          <RpnPill rpn={r.rpn} />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-gray-500">AP</span>
+          <ApPill entry={apEntry} rpn={r.rpn} />
+        </div>
+      </div>
     </div>
   )
 }
@@ -470,15 +727,18 @@ function ApTableEditor({ fmea }: { fmea: Fmea }) {
 function RatingSelect({
   value,
   onChange,
+  className,
 }: {
   value: number | undefined
   onChange: (v: number | undefined) => void
+  className?: string
 }) {
+  // px-2 + 넉넉한 폭으로 두 자리("10")가 잘리지 않게. 표=w-full(넓힌 컬럼), 카드=w-20.
   return (
     <select
       value={value ?? ''}
       onChange={(e) => onChange(e.target.value ? Number(e.target.value) : undefined)}
-      className="w-full min-w-0 rounded-md border border-gray-300 px-1 py-1 text-sm"
+      className={`min-w-0 rounded-md border border-gray-300 px-2 py-1 text-sm ${className ?? 'w-full'}`}
     >
       <option value="">—</option>
       {RATINGS.map((r) => (
