@@ -104,6 +104,26 @@ DFMEA/PFMEA를 AIAG-VDA 7단계로 안내하고, 각 단계에서 예시를 보�
 - **Excel 반영**: P-Diagram·B-1 출처·인터페이스의 Excel 표기(B-2 뒤 별도 꼬리 작업). P-Diagram 그래픽(박스+화살표) 렌더.
 - **Phase 5 (CLAUDE 연동)**: 별도 최소 Node/Express 프록시(스택 예외).
 
+## 실사용 현황(실무 데이터)
+- **Signboard(전광판, DFMEA) 실데이터 로드됨** — 예시가 아니라 실제 진행 중인 분석. 구조/기능/실패체인(FE·FM·FC)까지 입력됨.
+- **Step 5의 O·D 미기입 상태**: 발생도(O)·검출도(D) 미입력이라 RPN/AP 미산출 · 품질 점검 R1/R3도 아직 근거 없음(정상). **다음 실무 작업 = D를 "설계관리(DV) 기준"으로 매기는 것**(DFMEA의 D는 설계검증 강도 — `help.ts` `detection` 팝오버 참조), 이어 O 입력 → RPN/AP·점검 활성화.
+
+## 외부 JSON import 필드명 참조표(교정 전/후)
+외부에서 만든 JSON을 불러올 때 스키마와 **키 이름이 달라 조용히 누락/기본값 대체**되던 사례 교정 기록. `normalizeProject`는 아래 "후" 키만 읽는다(누락 필드는 방어적으로 기본값). 임포트용 JSON 작성 시 이 표대로 맞출 것.
+
+| 위치 | 전(외부 흔한 오류) | 후(스키마 정답) | 이유 |
+|---|---|---|---|
+| 최상위 | `title`, `type`, `riskMethod`(루트) | **`meta:{ title, type, riskMethod }`** | 정규화가 `p.meta`만 읽음 → 래핑 안 하면 기본값 대체 |
+| planning | `team:["이름"]`(string[]) | **`team:[{ id, name }]`**(TeamMember[]) | 팀원은 `{id,name}` 객체 |
+| functions[] | `structureId` | **`structureNodeId`** | 틀리면 기능이 노드에 안 붙어 Step 3에서 안 보임 |
+| optimizations[] | `preventionAction` | **`preventiveAction`** | 오탈자(preventive) |
+| optimizations[] | `detectionAction` | **`detectiveAction`** | 오탈자(detective) |
+| optimizations[] | `owner` | **`responsibility`** | 담당자 |
+| optimizations[] | `dueDate` | **`targetDate`** | 목표일 |
+| optimizations[] | `status:"미착수"` | **`status:"open"`** | 라벨 아님·enum(`open`/`in_progress`/`done`) |
+| pDiagrams[].noises[] | `category:"aging"` | **`category:"wear"`** | enum(`piece`/`wear`/`usage`/`environment`/`interaction`), `aging` 없음 |
+| 최상위 | (documentation 없음) | **`documentation:{ summary:"" }`** | 스키마 완성용 기본값 |
+
 ## 미룰 것(명시적 범위 밖 — 요청 전 손대지 말 것)
 - 서로 다른 Subsystem의 Component 간 연결, Subsystem↔Component 교차레벨 연결.
 - 드래그로 소속 변경(reparent), 3레벨 초과 중첩, 블록 안 미니어처 미리보기.
