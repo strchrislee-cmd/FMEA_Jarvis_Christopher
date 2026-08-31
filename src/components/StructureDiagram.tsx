@@ -544,21 +544,24 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
                     {levelLabel(type, 0)}
                   </text>
                   {/* 헤더: 오른쪽 이름(우측 정렬) — 더블클릭으로 이름 편집.
-                      pointerDown은 전파만 막아 그룹 드래그/캡처를 피한다(캡처 시 dblclick이 삼켜짐). */}
-                  <text
-                    x={box.x + box.w - 12}
-                    y={box.y - 8}
-                    textAnchor="end"
-                    fontFamily="var(--font-ui, sans-serif)"
-                    fontSize={12}
-                    fontWeight={600}
-                    fill={sel ? '#2563eb' : '#334155'}
-                    style={{ cursor: 'text' }}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onDoubleClick={(e) => startEdit(e, box.id)}
-                  >
-                    {box.name}
-                  </text>
+                      pointerDown은 전파만 막아 그룹 드래그/캡처를 피한다(캡처 시 dblclick이 삼켜짐).
+                      편집 중(editing===id)엔 미렌더 → 오버레이 입력과 겹치지 않음. */}
+                  {editing !== box.id && (
+                    <text
+                      x={box.x + box.w - 12}
+                      y={box.y - 8}
+                      textAnchor="end"
+                      fontFamily="var(--font-ui, sans-serif)"
+                      fontSize={12}
+                      fontWeight={600}
+                      fill={sel ? '#2563eb' : '#334155'}
+                      style={{ cursor: 'text' }}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onDoubleClick={(e) => startEdit(e, box.id)}
+                    >
+                      {box.name}
+                    </text>
+                  )}
                 </g>
               )
             })}
@@ -619,20 +622,23 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
                     onPointerDown={(e) => startDrag(e, n)}
                   />
                   {/* 이름 텍스트: 더블클릭으로 이름 편집(본체 더블클릭은 향후 드릴인용).
-                      pointerDown은 전파만 막아 팬/캡처를 피한다(캡처 시 dblclick이 삼켜짐). 드래그는 본체로. */}
-                  <text
-                    x={p.x + 14}
-                    y={p.y + 27}
-                    fontFamily="sans-serif"
-                    fontSize={14}
-                    fontWeight={600}
-                    fill="#111827"
-                    style={{ cursor: 'text' }}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onDoubleClick={(e) => startEdit(e, n.id)}
-                  >
-                    {truncate(n.name || '(이름 없음)')}
-                  </text>
+                      pointerDown은 전파만 막아 팬/캡처를 피한다(캡처 시 dblclick이 삼켜짐). 드래그는 본체로.
+                      편집 중(editing===id)엔 미렌더 → 오버레이 입력과 겹치지 않음. */}
+                  {editing !== n.id && (
+                    <text
+                      x={p.x + 14}
+                      y={p.y + 27}
+                      fontFamily="sans-serif"
+                      fontSize={14}
+                      fontWeight={600}
+                      fill="#111827"
+                      style={{ cursor: 'text' }}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onDoubleClick={(e) => startEdit(e, n.id)}
+                    >
+                      {truncate(n.name || '(이름 없음)')}
+                    </text>
+                  )}
                   <text x={p.x + 14} y={p.y + 46} fontFamily="ui-monospace, monospace" fontSize={10} fill="#94a3b8" style={{ pointerEvents: 'none' }}>
                     {levelLabel(type, inDrill ? 2 : 1).toUpperCase()}
                   </text>
@@ -723,19 +729,16 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
           </div>
         )}
 
-        {/* 생성 직후 인라인 이름 편집 */}
+        {/* 인라인 이름 편집(원래 <text>는 위에서 미렌더 → 겹침 없음) */}
         {editNode && editScreen && (
-          <input
-            autoFocus
-            value={editNode.name}
-            onChange={(e) => fmea.renameNode(editNode.id, e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === 'Escape') setEditing(null)
-            }}
-            onBlur={() => setEditing(null)}
+          <NameEditInput
+            key={editNode.id}
+            initial={editNode.name}
             placeholder={`${levelLabel(type, editNode.level)} 이름`}
-            className="absolute z-30 rounded-md border border-blue-500 px-2 py-1 text-sm shadow outline-none"
-            style={{ left: editScreen.x, top: editScreen.y, width: 168 }}
+            left={editScreen.x}
+            top={editScreen.y}
+            onSave={(name) => fmea.renameNode(editNode.id, name)}
+            onClose={() => setEditing(null)}
           />
         )}
 
@@ -830,4 +833,59 @@ function labelW(label: string): number {
 }
 function nodeName(fmea: Fmea, id: string): string {
   return fmea.project.structure.find((n) => n.id === id)?.name || '(이름 없음)'
+}
+
+// 블록/그룹 이름 인라인 편집 오버레이(Step 4 인라인 편집과 동일 제스처):
+// Enter 저장 / Esc 취소(원복) / 포커스 아웃 저장. 이름은 한 줄이라 줄바꿈 없음.
+// draft로만 편집하다 commit 때 한 번 저장 → Esc는 저장하지 않으므로 원문 유지.
+// bg-white로 뒤 요소가 비치지 않음(원래 <text>는 편집 중 미렌더).
+function NameEditInput({
+  initial,
+  placeholder,
+  left,
+  top,
+  onSave,
+  onClose,
+}: {
+  initial: string
+  placeholder: string
+  left: number
+  top: number
+  onSave: (name: string) => void
+  onClose: () => void
+}) {
+  const [draft, setDraft] = useState(initial)
+  const skip = useRef(false) // Esc 종료 시 뒤따르는 blur가 저장하지 않도록
+  function commit() {
+    const t = draft.trim()
+    if (t) onSave(t) // 빈 값은 저장 안 함(원문 유지)
+    onClose()
+  }
+  return (
+    <input
+      autoFocus
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          commit()
+        } else if (e.key === 'Escape') {
+          e.preventDefault()
+          skip.current = true
+          onClose()
+        }
+      }}
+      onBlur={() => {
+        if (skip.current) {
+          skip.current = false
+          return
+        }
+        commit()
+      }}
+      placeholder={placeholder}
+      className="absolute z-30 rounded-md border border-blue-500 bg-white px-2 py-1 text-sm shadow outline-none"
+      style={{ left, top, width: 168 }}
+    />
+  )
 }

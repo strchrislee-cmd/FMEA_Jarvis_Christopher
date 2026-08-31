@@ -131,6 +131,11 @@ DFMEA/PFMEA를 AIAG-VDA 7단계로 안내하고, 각 단계에서 예시를 보�
 - 줌/팬/드릴/캔버스크기 상태 저장(전부 세션 UI).
 - P-Diagram/인터페이스의 Excel·이미지 삽입(커뮤니티 SheetJS는 이미지 미지원).
 
+## Step 2 다이어그램 이름 편집 겹침 수정
+- 원인: 편집 시 SVG 이름 `<text>`를 숨기지 않고 그 위에 HTML `<input>`을 겹쳐 뒤 텍스트가 비쳐 보임. 수정: **편집 중(`editing===id`)엔 원래 `<text>` 미렌더**(숨김 아님·조건부 렌더 교체) — 블록 이름·System 헤더 이름·드릴인 Component 모두 같은 메커니즘이라 함께 해결. 입력에 `bg-white` 부여.
+- 제스처를 Step 4와 통일: 공용 `NameEditInput`(draft state) — **Enter 저장 / Esc 취소(원복) / blur 저장**, 빈 값은 원문 유지. 이름은 한 줄이라 줄바꿈 없음(기존 live-write→commit-on-save로 바꿔 Esc 원복 지원). 데이터·좌표·연결 로직 불변.
+- **인터페이스 라벨 편집은 겹침 없음**(불투명 `bg-white` 팝오버 카드에서 편집, SVG 라벨과 분리) → 손대지 않음.
+
 ## Step 4 인라인 편집(FM·FE·FC)
 - **더블클릭 → 인라인 편집**(Step 2 노드 이름 편집과 동일 제스처): 공용 `InlineEditor`(FailureEditor 내부, textarea) — **Enter 저장 / Shift+Enter 줄바꿈 / Esc 취소(원복) / blur 저장**, 빈 값은 저장 안 함(원문 유지), 여러 줄 입력. mutator는 `useFmea.setFailureModeText/EffectText/CauseText`(각 `text`만 갱신, **모델 shape·다른 필드·삭제/cascade 무관**).
 - **선택 제스처 보존**: 1열 FM은 클릭=선택(FE/FC 열 갱신). 편집은 **텍스트 span 더블클릭으로만** 진입하고, 편집 중엔 select `<button>` 대신 편집기로 교체(textarea의 button 중첩 회피, `stopPropagation`으로 select 전파 차단). FE/FC는 `<li>` 내 span↔textarea 교체(`EditableText`).
