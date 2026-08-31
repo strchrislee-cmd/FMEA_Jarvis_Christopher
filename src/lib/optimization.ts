@@ -7,6 +7,20 @@ export const OPT_STATUS_LABELS: Record<OptStatus, string> = {
   done: '완료',
 }
 
+// "조치 불필요" 사유 기본 프리셋(seed). 프로젝트에 복사되어 사용자가 수정·추가·삭제한다
+// (하드코딩 상수를 직접 쓰지 않고 project.noActionPresets를 읽는다).
+export const DEFAULT_NO_ACTION_PRESETS: string[] = [
+  'RPN·AP가 낮아 현 상태 수용',
+  '현재 예방·검출 관리로 충분히 통제됨',
+  '설계 변경 불가 (사양·고객 요구 제약)',
+  '상위 시스템에서 대응 (본 FMEA 범위 외)',
+  '차기 개발 반영 예정',
+  '유사 제품 실적상 문제 이력 없음',
+]
+
+// Excel 상태 칸에 표기할 라벨(빈칸=미검토와 구분).
+export const NO_ACTION_STATUS_LABEL = '조치 불필요'
+
 // 조치 후 S/O/D가 모두 있으면 파생 RPN/AP (저장하지 않음 — 결정 #3 동일 적용)
 export function postComplete(o: OptimizationItem): boolean {
   return o.severity != null && o.occurrence != null && o.detection != null

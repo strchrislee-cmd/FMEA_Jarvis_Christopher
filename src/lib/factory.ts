@@ -1,6 +1,7 @@
 import type { ApLevel, FailureCause, FailureMode, FmeaProject, ScaleTable, ScaleTables } from '../types/fmea'
 import { dfmeaScalePreset } from './scalePreset'
 import { allPdItemIds } from './pdiagram'
+import { DEFAULT_NO_ACTION_PRESETS } from './optimization'
 
 // AP 조합표 방어: 신형 {ap,label} 또는 구버전 문자열("H") 모두 수용.
 // 문자열이면 label 없이 등급만. 등급이 H/M/L이 아니면 항목 제외(임의 라벨 생성 금지).
@@ -50,6 +51,7 @@ export function createEmptyProject(): FmeaProject {
     layout: {},
     pDiagrams: [],
     checks: { rpnActionBaseline: 100 },
+    noActionPresets: [...DEFAULT_NO_ACTION_PRESETS],
   }
 }
 
@@ -110,6 +112,10 @@ export function normalizeProject(raw: unknown): FmeaProject {
     layout: obj(p.layout) as FmeaProject['layout'],
     pDiagrams,
     checks: { rpnActionBaseline: normalizeBaseline(obj(p.checks).rpnActionBaseline) },
+    // 누락(구버전) → 기본 프리셋. 명시적 빈 배열은 존중(사용자가 비운 것).
+    noActionPresets: Array.isArray(p.noActionPresets)
+      ? (p.noActionPresets as unknown[]).filter((x): x is string => typeof x === 'string')
+      : [...DEFAULT_NO_ACTION_PRESETS],
   }
 }
 

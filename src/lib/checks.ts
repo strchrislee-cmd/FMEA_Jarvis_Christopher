@@ -33,6 +33,8 @@ const STEP5 = 4 // Step 5(리스크 분석) 인덱스 — 위반 행 점프 대�
 function hasAction(project: FmeaProject, fcId: string): boolean {
   return project.optimizations.some((o) => o.failureCauseId === fcId)
 }
+// "조치 불필요" 판단(검토 후 사유 기록) 여부 — 미검토(빈칸)와 구분.
+const hasNoActionReason = (r: RiskRow): boolean => !!r.fc.noActionReason?.trim()
 const rowKey = (r: RiskRow): string => `${r.fe.id}-${r.fm.id}-${r.fc.id}`
 const rowLabel = (r: RiskRow): string => `${r.fm.text} · ${r.fe.text} · ${r.fc.text}`
 const toItem = (r: RiskRow, note: string): CheckItem => ({
@@ -43,10 +45,16 @@ const toItem = (r: RiskRow, note: string): CheckItem => ({
 
 type CheckRule = (project: FmeaProject, config: CheckConfig) => CheckResult
 
-// R1: RPN이 기준선 이상인데 조치가 없는 행.
+// R1: RPN이 기준선 이상인데 조치가 없는 행. "조치 불필요" 판단이 기록된 행은 검토 완료로 보아 제외.
 const rpnNoAction: CheckRule = (project, config) => {
   const items = buildRiskRows(project)
-    .filter((r) => r.rpn != null && r.rpn >= config.rpnActionBaseline && !hasAction(project, r.fc.id))
+    .filter(
+      (r) =>
+        r.rpn != null &&
+        r.rpn >= config.rpnActionBaseline &&
+        !hasAction(project, r.fc.id) &&
+        !hasNoActionReason(r),
+    )
     .map((r) => toItem(r, `RPN ${r.rpn} ≥ 기준 ${config.rpnActionBaseline}, 조치 없음`))
   return {
     ruleId: 'rpn-no-action',
@@ -58,10 +66,13 @@ const rpnNoAction: CheckRule = (project, config) => {
 }
 
 // R2: S가 9·10(안전/법규)인데 조치가 없는 행 — RPN과 무관.
+// ★ 안전 행은 "조치 불필요" 판단이 기록돼도 제외하지 않는다(안전은 판단으로 waive 불가) — note에 표기해 별도로 보이게.
 const safetyNoAction: CheckRule = (project) => {
   const items = buildRiskRows(project)
     .filter((r) => isSafetyRow(r.s) && !hasAction(project, r.fc.id))
-    .map((r) => toItem(r, `S=${r.s} 안전/법규, 조치 없음`))
+    .map((r) =>
+      toItem(r, `S=${r.s} 안전/법규, 조치 없음${hasNoActionReason(r) ? ' (조치 불필요 판단 있음 — 안전 항목은 재확인 권고)' : ''}`),
+    )
   return {
     ruleId: 'safety-no-action',
     category: 'action',

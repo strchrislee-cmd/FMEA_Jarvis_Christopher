@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx-js-style'
 import type { FmeaProject } from '../types/fmea'
 import { buildRiskRows, isSafetyRow, rpnBand } from './risk'
-import { mergeOptimizations, optimizationsForCause } from './optimization'
+import { mergeOptimizations, NO_ACTION_STATUS_LABEL, optimizationsForCause } from './optimization'
 import { levelLabels, levelLabelsBilingual, structurePath } from './structure'
 import { SOD_LABELS } from './help'
 import { APP_NAME, DEVELOPER } from './app'
@@ -92,15 +92,23 @@ function buildMainSheet(project: FmeaProject): XLSX.WorkSheet {
     const [s1, s2, s3] = fn
       ? structurePath(project.structure, fn.structureNodeId)
       : ['', '', '']
-    const m = mergeOptimizations(optimizationsForCause(project, r.fc.id), project.apTable)
+    const opts = optimizationsForCause(project, r.fc.id)
+    const m = mergeOptimizations(opts, project.apTable)
     const apCell = r.rpn == null ? '' : (r.ap ?? '미설정')
+
+    // "조치 불필요" 판단(조치 레코드 없음 + 사유 기록): 컬럼 신설 없이 기존 조치(예방)/상태 칸에 표기.
+    // 미검토(빈칸)와 구분 — 미검토 행은 조치 칸을 그대로 비워 둔다.
+    const reason = r.fc.noActionReason?.trim()
+    const preventiveCell =
+      opts.length === 0 && reason ? `${NO_ACTION_STATUS_LABEL}: ${reason}` : m.preventiveAction
+    const statusCell = opts.length === 0 && reason ? NO_ACTION_STATUS_LABEL : m.status
 
     data.push([
       s1, s2, s3, fn?.text ?? '',
       r.fe.text, r.s ?? '', r.fm.text, r.fc.text,
       r.fc.prevention ?? '', r.o ?? '', r.fc.detectionControl ?? '', r.d ?? '',
       r.rpn ?? '', apCell,
-      m.preventiveAction, m.detectiveAction, m.responsibility, m.targetDate, m.status,
+      preventiveCell, m.detectiveAction, m.responsibility, m.targetDate, statusCell,
       m.postS, m.postO, m.postD, m.postRPN, m.postAP,
     ])
     meta.push({ s: r.s, rpn: r.rpn ?? '', ap: apCell, postRPN: m.postRPN, postAP: m.postAP })

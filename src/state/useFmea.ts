@@ -189,11 +189,21 @@ export function useFmea() {
     }))
   }
 
-  function patchCause(fcId: string, patch: Partial<{ occurrence: number; detection: number; prevention: string; detectionControl: string; preventionControlId: string | undefined }>) {
+  function patchCause(fcId: string, patch: Partial<{ occurrence: number; detection: number; prevention: string; detectionControl: string; preventionControlId: string | undefined; noActionReason: string | undefined }>) {
     setProject((p) => ({
       ...p,
       failureCauses: p.failureCauses.map((c) => (c.id === fcId ? { ...c, ...patch } : c)),
     }))
+  }
+
+  // "조치 불필요" 사유 프리셋 관리(프로젝트 저장 데이터). 중복은 무시.
+  function addNoActionPreset(text: string) {
+    const t = text.trim()
+    if (!t) return
+    setProject((p) => (p.noActionPresets.includes(t) ? p : { ...p, noActionPresets: [...p.noActionPresets, t] }))
+  }
+  function removeNoActionPreset(text: string) {
+    setProject((p) => ({ ...p, noActionPresets: p.noActionPresets.filter((x) => x !== text) }))
   }
 
   // 척도표: 현재 유형의 S/O/D 등급 설명 편집 (index 0 = 등급 1)
@@ -416,6 +426,8 @@ export function useFmea() {
     addOptimization,
     updateOptimization,
     removeOptimization,
+    addNoActionPreset,
+    removeNoActionPreset,
     goPrev,
     goNext,
     goTo,

@@ -131,6 +131,14 @@ DFMEA/PFMEA를 AIAG-VDA 7단계로 안내하고, 각 단계에서 예시를 보�
 - 줌/팬/드릴/캔버스크기 상태 저장(전부 세션 UI).
 - P-Diagram/인터페이스의 Excel·이미지 삽입(커뮤니티 SheetJS는 이미지 미지원).
 
+## Step 6 "조치 불필요" 사유 프리셋
+- **모델 = `FailureCause.noActionReason?`(optional)** — optimizations 아님. 근거: O/D·현재관리와 같은 FC 귀속이라 정합, optimizations에 넣으면 `hasAction`·`postRPN`·`mergeOptimizations` 오작동. optional·가산이라 계산·정규화 무파급('조치'와 '조치 안 함 판단'을 자료구조로 분리).
+- **프리셋 = `project.noActionPresets: string[]`**(편집 데이터, 하드코딩 상수 아님). 기본 6종 seed는 `lib/optimization.ts` `DEFAULT_NO_ACTION_PRESETS`, factory가 프로젝트에 복사·`normalizeProject`가 구버전 누락 시 주입(명시적 빈 배열은 존중). `useFmea.addNoActionPreset/removeNoActionPreset`, UI에서 추가·삭제.
+- **UI(OptimizationEditor `NoActionSection`)**: 프리셋 드롭다운 선택 **시에만** `patchCause(fc,{noActionReason})`로 채움(자동 아님) → 이후 textarea 자유 수정, "판단 취소(미검토)"로 제거. **3-state 배지**: 조치 있음(초록 `조치 n`)/조치 불필요(슬레이트)/미검토(앰버) — 빈칸(미검토)과 판단(불필요) 구분.
+- **Excel**(컬럼 신설 없음): 불필요 행(조치 레코드 없음+사유)은 **상태='조치 불필요'** + **조치(예방)='조치 불필요: {사유}'**. 미검토 행은 조치 칸 빈칸 유지(구분).
+- **점검 연동**: R1(rpnNoAction)은 `noActionReason` 있는 행 **위반 제외**(검토 완료). R2(safetyNoAction)는 **S=9·10 행은 불필요 판단이 있어도 계속 표시**(안전 waive 불가), note에 "조치 불필요 판단 있음 — 재확인 권고" 표기.
+- **미룸/후속**: 여러 행 일괄 적용(다중 선택)은 단일 선택뿐이라 방법 확인 후 별도.
+
 ## Step 2 다이어그램 블록 정렬(스냅·자동정렬)
 - **좌표는 `layout` 위성 필드만 갱신**(도메인 불변). 격자 단일 상수 `lib/diagram.ts` `GRID=20`, `snapToGrid`.
 - **스냅 그리드**: 드래그 중 `onMove`에서 `toContent`(getScreenCTM 역변환, 줌 무관)로 content 좌표 얻은 뒤 `snapToGrid` → 화면픽셀 아닌 content 기준 스냅. 어느 배율에서도 격자 배수.

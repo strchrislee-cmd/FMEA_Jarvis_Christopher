@@ -62,15 +62,27 @@ export default function OptimizationEditor({ fmea }: { fmea: Fmea }) {
                     <span className={`shrink-0 tabular-nums ${active ? 'text-blue-100' : 'text-gray-400'}`}>
                       RPN {r.rpn ?? '—'} · AP {apCell}
                     </span>
-                    {optCount > 0 && (
-                      <span
-                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-xs ${
-                          active ? 'bg-white/20 text-white' : 'bg-green-50 text-green-700'
-                        }`}
-                      >
-                        조치 {optCount}
-                      </span>
-                    )}
+                    {/* 3-state: 조치 있음(초록) / 조치 불필요(슬레이트) / 미검토(앰버) */}
+                    {(() => {
+                      const base = 'shrink-0 rounded-full px-1.5 py-0.5 text-xs'
+                      if (optCount > 0)
+                        return (
+                          <span className={`${base} ${active ? 'bg-white/20 text-white' : 'bg-green-50 text-green-700'}`}>
+                            조치 {optCount}
+                          </span>
+                        )
+                      if (r.fc.noActionReason?.trim())
+                        return (
+                          <span className={`${base} ${active ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}`} title={r.fc.noActionReason}>
+                            조치 불필요
+                          </span>
+                        )
+                      return (
+                        <span className={`${base} ${active ? 'bg-white/20 text-white' : 'bg-amber-50 text-amber-700'}`}>
+                          미검토
+                        </span>
+                      )
+                    })()}
                   </div>
                   {/* 2줄: FE → FC (작은 회색, 말줄임) */}
                   <div className={`w-full truncate text-[11px] ${active ? 'text-blue-100' : 'text-gray-400'}`}>
@@ -109,6 +121,9 @@ function OptPanel({ fmea, row }: { fmea: Fmea; row: RiskRow }) {
         <span className="font-medium">RPN {row.rpn ?? '—'}</span> · AP{' '}
         {row.rpn == null ? '—' : (row.ap ?? '미설정')}
       </div>
+
+      {/* 조치 불필요 판단(FC 단위). 조치 레코드와 별개 — 미검토(빈칸)와 구분. */}
+      <NoActionSection fmea={fmea} fc={row.fc} hasOpts={opts.length > 0} />
 
       <div className="mb-2 flex items-center justify-between">
         <h3 className="text-sm font-medium text-gray-700">조치 (원인 FC 단위)</h3>
@@ -219,6 +234,106 @@ function OptPanel({ fmea, row }: { fmea: Fmea; row: RiskRow }) {
           })}
         </ul>
       )}
+    </div>
+  )
+}
+
+// "조치 불필요" 판단 섹션: 프리셋 드롭다운으로 사유를 채우고(선택 시에만) 자유 수정.
+// 사유 없음 = 미검토(빈칸). 프리셋 목록은 프로젝트 저장 데이터(추가/삭제 가능).
+function NoActionSection({ fmea, fc, hasOpts }: { fmea: Fmea; fc: RiskRow['fc']; hasOpts: boolean }) {
+  const { project } = fmea
+  const reason = fc.noActionReason?.trim() ?? ''
+  const [newPreset, setNewPreset] = useState('')
+  const set = (v: string | undefined) => fmea.patchCause(fc.id, { noActionReason: v })
+
+  return (
+    <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 p-2">
+      <div className="mb-1 flex items-center justify-between">
+        <span className="text-xs font-semibold text-slate-600">조치 불필요 판단</span>
+        {reason && (
+          <button type="button" onClick={() => set(undefined)} className="text-xs text-slate-500 hover:underline">
+            판단 취소(미검토)
+          </button>
+        )}
+      </div>
+      {reason ? (
+        <textarea
+          value={fc.noActionReason ?? ''}
+          onChange={(e) => set(e.target.value)}
+          rows={2}
+          className="w-full resize-y rounded-md border border-slate-300 bg-white px-2 py-1 text-sm outline-none focus:border-blue-500"
+        />
+      ) : (
+        <p className="mb-1 text-xs text-slate-500">
+          RPN·AP가 낮아 조치가 불필요하면 사유를 선택하세요. 선택 전에는 <b>미검토(빈칸)</b>로 남습니다.
+        </p>
+      )}
+      {/* 프리셋 선택 시에만 채움(자동 아님) */}
+      <select
+        value=""
+        onChange={(e) => {
+          if (e.target.value) set(e.target.value)
+          e.currentTarget.value = ''
+        }}
+        className="mt-1 w-full rounded-md border border-dashed border-slate-400 bg-white px-2 py-1 text-xs text-slate-700 outline-none"
+      >
+        <option value="">{reason ? '다른 사유 프리셋으로 교체…' : '조치 불필요 — 사유 프리셋 선택…'}</option>
+        {project.noActionPresets.map((p) => (
+          <option key={p} value={p}>
+            {p}
+          </option>
+        ))}
+      </select>
+      {hasOpts && reason && (
+        <p className="mt-1 text-[11px] text-amber-600">※ 조치가 있어 Excel엔 조치 내용이 출력됩니다(불필요 사유는 화면 참고용).</p>
+      )}
+      <details className="mt-1.5">
+        <summary className="cursor-pointer text-[11px] text-slate-500">사유 프리셋 관리</summary>
+        <div className="mt-1 flex gap-1">
+          <input
+            value={newPreset}
+            onChange={(e) => setNewPreset(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                fmea.addNoActionPreset(newPreset)
+                setNewPreset('')
+              }
+            }}
+            placeholder="사유 추가"
+            className="min-w-0 flex-1 rounded-md border border-slate-300 px-2 py-1 text-xs outline-none focus:border-blue-500"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              fmea.addNoActionPreset(newPreset)
+              setNewPreset('')
+            }}
+            className="shrink-0 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100"
+          >
+            추가
+          </button>
+        </div>
+        <ul className="mt-1 flex flex-wrap gap-1">
+          {project.noActionPresets.map((p) => (
+            <li
+              key={p}
+              className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-600"
+            >
+              <span className="max-w-40 truncate" title={p}>
+                {p}
+              </span>
+              <button
+                type="button"
+                onClick={() => fmea.removeNoActionPreset(p)}
+                aria-label={`${p} 삭제`}
+                className="text-slate-400 hover:text-slate-700"
+              >
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+      </details>
     </div>
   )
 }

@@ -50,6 +50,7 @@ export interface FailureCause {
   detection?: number // D 1~10
   noiseId?: string // (B-1) 출처: 이 FC를 만든 P-Diagram Noise Factor 항목 id (텍스트 비미러)
   preventionControlId?: string // (B-1) 출처: prevention을 채운 P-Diagram Control Factor 항목 id (텍스트 비미러)
+  noActionReason?: string // "조치 불필요" 판단 사유(선택). 있으면 검토 후 판단 = 미검토(빈칸)와 구분. 조치 레코드와 별개.
 }
 
 // ── 5. Risk Analysis ──────────────────────────
@@ -179,4 +180,5 @@ export interface FmeaProject {
   layout: Layout // 블록 배치 좌표(위성, 별도 섹션) — 도메인 배열과 독립
   pDiagrams: PDiagram[] // 블록 단위 P-Diagram(평면+id, structureNodeId로 노드 참조)
   checks: ChecksConfig // Step 7 품질 점검 설정
+  noActionPresets: string[] // "조치 불필요" 사유 프리셋(편집 가능, 하드코딩 아님)
 }
