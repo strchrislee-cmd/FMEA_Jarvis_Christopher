@@ -216,6 +216,11 @@ export function useFmea() {
     setProject((p) => ({ ...p, layout: { ...p.layout, [nodeId]: pos } }))
   }
 
+  // 자동 정렬: 여러 블록 좌표를 한 번에 layout에 병합(도메인 데이터 불변).
+  function setNodePositions(map: Record<string, { x: number; y: number }>) {
+    setProject((p) => ({ ...p, layout: { ...p.layout, ...map } }))
+  }
+
   function addInterface(iface: Interface) {
     setProject((p) => ({ ...p, interfaces: [...p.interfaces, iface] }))
   }
@@ -400,6 +405,7 @@ export function useFmea() {
     setApTable,
     setRpnBaseline,
     setNodePosition,
+    setNodePositions,
     addInterface,
     updateInterface,
     removeInterface,

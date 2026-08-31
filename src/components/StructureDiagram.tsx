@@ -3,7 +3,7 @@ import type { InterfaceKind, StructureNode } from '../types/fmea'
 import type { useFmea } from '../state/useFmea'
 import { newId } from '../lib/id'
 import { levelLabel } from '../lib/structure'
-import { BLOCK, blockPositions, systemSlots, type Pos } from '../lib/diagram'
+import { alignedPositions, BLOCK, blockPositions, snapToGrid, systemSlots, type Pos } from '../lib/diagram'
 import { getPDiagram, hasPDiagramContent } from '../lib/pdiagram'
 import PDiagramPanel from './PDiagramPanel'
 
@@ -238,6 +238,16 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
     resetContextState()
   }
 
+  // 자동 정렬: 현재 컨텍스트 블록을 격자·흐름에 맞춰 재배치(layout만 갱신, 도메인 불변).
+  // 되돌리기가 없으므로 실행 전 확인.
+  function alignBlocks() {
+    if (blocks.length === 0) return
+    if (!window.confirm('현재 배치가 재조정됩니다. 계속할까요?')) return
+    const map = alignedPositions(project.structure, project.interfaces, inDrill ? drillParent!.id : null)
+    fmea.setNodePositions(map)
+    setDrag(null)
+  }
+
   // 이름 재편집(이름 텍스트 더블클릭). 블록 본체 더블클릭은 향후 드릴인용으로 비워둔다.
   function startEdit(e: React.PointerEvent | React.MouseEvent, id: string) {
     e.stopPropagation()
@@ -331,8 +341,9 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
 
   function onMove(e: React.PointerEvent) {
     if (drag) {
+      // content 좌표로 변환 뒤 격자에 스냅(줌 무관 — toContent가 CTM 역변환).
       const p = toContent(e)
-      setDrag((d) => (d ? { ...d, x: Math.round(p.x - d.dx), y: Math.round(p.y - d.dy) } : d))
+      setDrag((d) => (d ? { ...d, x: snapToGrid(p.x - d.dx), y: snapToGrid(p.y - d.dy) } : d))
     } else if (connect) {
       const p = toContent(e)
       setConnect((c) => (c ? { ...c, x: p.x, y: p.y } : c))
@@ -460,6 +471,17 @@ export default function StructureDiagram({ fmea }: { fmea: Fmea }) {
         </div>
         <button type="button" onClick={fit} className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100">화면에 맞춤</button>
         <button type="button" onClick={() => setView({ k: 1, tx: 0, ty: 0 })} className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100">100%</button>
+
+        <span className="mx-1 h-4 w-px bg-gray-300" />
+        <button
+          type="button"
+          onClick={alignBlocks}
+          disabled={blocks.length === 0}
+          title="블록을 격자·연결 흐름에 맞춰 재배치"
+          className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          정렬
+        </button>
 
         <span className="mx-1 h-4 w-px bg-gray-300" />
         <span className="text-xs text-gray-400">캔버스</span>

@@ -131,6 +131,12 @@ DFMEA/PFMEA를 AIAG-VDA 7단계로 안내하고, 각 단계에서 예시를 보�
 - 줌/팬/드릴/캔버스크기 상태 저장(전부 세션 UI).
 - P-Diagram/인터페이스의 Excel·이미지 삽입(커뮤니티 SheetJS는 이미지 미지원).
 
+## Step 2 다이어그램 블록 정렬(스냅·자동정렬)
+- **좌표는 `layout` 위성 필드만 갱신**(도메인 불변). 격자 단일 상수 `lib/diagram.ts` `GRID=20`, `snapToGrid`.
+- **스냅 그리드**: 드래그 중 `onMove`에서 `toContent`(getScreenCTM 역변환, 줌 무관)로 content 좌표 얻은 뒤 `snapToGrid` → 화면픽셀 아닌 content 기준 스냅. 어느 배율에서도 격자 배수.
+- **자동 정렬 "정렬" 버튼**(툴바, `alignBlocks`): 확인창 후 `alignedPositions(structure, interfaces, drillInto)`를 `setNodePositions`(bulk)로 layout에 병합. 순수 함수는 System 그룹별로 위→아래 스택, 그룹 내부는 **타이디 트리** — 열(x)=인터페이스 from→to 최장경로 깊이(좌우 흐름), 행(y)=리프 순차·부모는 자식 y 평균(분기 상위가 자식들 세로 중앙). 좌표 전부 격자 배수. 최상위=Subsystem 그룹, 드릴=Component 그룹 동일 처리. 순환은 반복 상한으로 방어.
+- **미룸/후속**: 다중 선택(Shift+클릭) 기반 부분 정렬(가로/세로/간격 균등)은 3번 — 현재 단일 선택뿐이라 별도 논의.
+
 ## Step 2 다이어그램 이름 편집 겹침 수정
 - 원인: 편집 시 SVG 이름 `<text>`를 숨기지 않고 그 위에 HTML `<input>`을 겹쳐 뒤 텍스트가 비쳐 보임. 수정: **편집 중(`editing===id`)엔 원래 `<text>` 미렌더**(숨김 아님·조건부 렌더 교체) — 블록 이름·System 헤더 이름·드릴인 Component 모두 같은 메커니즘이라 함께 해결. 입력에 `bg-white` 부여.
 - 제스처를 Step 4와 통일: 공용 `NameEditInput`(draft state) — **Enter 저장 / Esc 취소(원복) / blur 저장**, 빈 값은 원문 유지. 이름은 한 줄이라 줄바꿈 없음(기존 live-write→commit-on-save로 바꿔 Esc 원복 지원). 데이터·좌표·연결 로직 불변.
