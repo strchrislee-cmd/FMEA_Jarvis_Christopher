@@ -127,6 +127,14 @@ export function useFmea() {
     setProject((p) => removeFailureModes(p, new Set([id])))
   }
 
+  // FM 텍스트 인라인 수정(text만; errorStateId 출처 포인터는 그대로 — 비미러)
+  function setFailureModeText(id: string, text: string) {
+    setProject((p) => ({
+      ...p,
+      failureModes: p.failureModes.map((m) => (m.id === id ? { ...m, text } : m)),
+    }))
+  }
+
   function addFailureEffect(failureModeId: string, text: string) {
     setProject((p) => ({
       ...p,
@@ -138,6 +146,14 @@ export function useFmea() {
     setProject((p) => ({
       ...p,
       failureEffects: p.failureEffects.filter((e) => e.id !== id),
+    }))
+  }
+
+  // FE 텍스트 인라인 수정(text만; S(severity)는 그대로)
+  function setFailureEffectText(id: string, text: string) {
+    setProject((p) => ({
+      ...p,
+      failureEffects: p.failureEffects.map((e) => (e.id === id ? { ...e, text } : e)),
     }))
   }
 
@@ -153,6 +169,14 @@ export function useFmea() {
   // O/D·관리는 FC 필드라 FC와 함께 사라짐)
   function removeFailureCause(id: string) {
     setProject((p) => removeFailureCauses(p, new Set([id])))
+  }
+
+  // FC 텍스트 인라인 수정(text만; O/D·관리·noiseId 등 다른 필드는 그대로 — 비미러)
+  function setFailureCauseText(id: string, text: string) {
+    setProject((p) => ({
+      ...p,
+      failureCauses: p.failureCauses.map((c) => (c.id === id ? { ...c, text } : c)),
+    }))
   }
 
   // ── Step 5: Risk (S→FE, O/D·관리→FC / 척도표 / AP표) ──
@@ -360,10 +384,13 @@ export function useFmea() {
     removeFunction,
     addFailureMode,
     removeFailureMode,
+    setFailureModeText,
     addFailureEffect,
     removeFailureEffect,
+    setFailureEffectText,
     addFailureCause,
     removeFailureCause,
+    setFailureCauseText,
     setEffectSeverity,
     patchCause,
     setScale,

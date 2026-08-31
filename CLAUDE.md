@@ -131,6 +131,12 @@ DFMEA/PFMEA를 AIAG-VDA 7단계로 안내하고, 각 단계에서 예시를 보�
 - 줌/팬/드릴/캔버스크기 상태 저장(전부 세션 UI).
 - P-Diagram/인터페이스의 Excel·이미지 삽입(커뮤니티 SheetJS는 이미지 미지원).
 
+## Step 4 인라인 편집(FM·FE·FC)
+- **더블클릭 → 인라인 편집**(Step 2 노드 이름 편집과 동일 제스처): 공용 `InlineEditor`(FailureEditor 내부, textarea) — **Enter 저장 / Shift+Enter 줄바꿈 / Esc 취소(원복) / blur 저장**, 빈 값은 저장 안 함(원문 유지), 여러 줄 입력. mutator는 `useFmea.setFailureModeText/EffectText/CauseText`(각 `text`만 갱신, **모델 shape·다른 필드·삭제/cascade 무관**).
+- **선택 제스처 보존**: 1열 FM은 클릭=선택(FE/FC 열 갱신). 편집은 **텍스트 span 더블클릭으로만** 진입하고, 편집 중엔 select `<button>` 대신 편집기로 교체(textarea의 button 중첩 회피, `stopPropagation`으로 select 전파 차단). FE/FC는 `<li>` 내 span↔textarea 교체(`EditableText`).
+- **B-1 출처 포인터와 비미러**: ◇ 출처(Error State→FM / Noise→FC) 있는 항목의 text를 고쳐도 **원본 P-Diagram 항목·포인터 불변**(확정 설계). 편집 시 "◇ 출처와 별개로 저장됩니다(원본 P-Diagram 불변)" 안내 표시, 앱은 원본을 동기화하지 않음.
+- **Step 5(예방/검출관리)·Step 6(조치 텍스트 등)는 이미 편집 가능**(input↔`patchCause`/`updateOptimization`) → 손대지 않음.
+
 ## 데이터 로드·초기화
 - **예시 데이터는 하드코딩 아님**: 앱은 시작 시 `loadProject()`가 `localStorage['fmea:project:v1']`를 읽고, 없으면 `createEmptyProject()`(빈 상태) 반환. 전광판 등은 이전에 그 브라우저에서 JSON을 불러와 저장돼 있을 때만 다시 뜬다(파일이 아니라 브라우저 저장소). src·dist에 Signboard/전광판 문자열 0건.
 - **툴바 "새로 시작" 버튼**(`useFmea.newProject`): `createEmptyProject()`로 전 입력 비우고 Step 1로 → 저장 effect가 빈 프로젝트를 localStorage에 덮어써 예시 잔여도 제거. **되돌릴 수 없어 `window.confirm`으로 확인**(먼저 JSON 내보내기 안내). localStorage 키는 그대로 유지(삭제 아님·덮어쓰기).

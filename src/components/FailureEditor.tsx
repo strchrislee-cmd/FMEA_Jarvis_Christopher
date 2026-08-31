@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { useFmea } from '../state/useFmea'
 import { flattenTree, levelLabel, nodeContextLabel } from '../lib/structure'
 import { getPDiagram } from '../lib/pdiagram'
@@ -20,6 +20,7 @@ export default function FailureEditor({ fmea }: { fmea: Fmea }) {
   const { project } = fmea
   const [functionId, setFunctionId] = useState<string | null>(null)
   const [modeId, setModeId] = useState<string | null>(null)
+  const [editModeId, setEditModeId] = useState<string | null>(null) // 인라인 편집 중인 FM id
 
   const selectedMode = project.failureModes.find((m) => m.id === modeId) ?? null
   // FE/FC 열 헤더에 붙일 소속 표기: "노드 소속 · 선택 FM". 선택 FM이 있을 때만.
@@ -44,29 +45,51 @@ export default function FailureEditor({ fmea }: { fmea: Fmea }) {
         <ul className="mt-2 space-y-1">
           {modes.map((m) => {
             const active = m.id === modeId
+            const editing = m.id === editModeId
             return (
               <li key={m.id} className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setModeId(m.id)}
-                  className={`flex flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left text-sm ${
-                    active ? 'bg-blue-600 text-white' : 'border border-gray-200 bg-white hover:bg-gray-50'
-                  }`}
-                >
-                  {m.errorStateId && (
+                {/* 편집 중이면 select 버튼 대신 인라인 편집기로 교체(button 내부 textarea 중첩 회피).
+                    텍스트 더블클릭으로만 편집 진입 → 단일클릭 선택 동작 유지. */}
+                {editing ? (
+                  <InlineEditor
+                    initial={m.text}
+                    onSave={(t) => fmea.setFailureModeText(m.id, t)}
+                    onCancel={() => setEditModeId(null)}
+                    sourceNote={!!m.errorStateId}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setModeId(m.id)}
+                    className={`flex flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left text-sm ${
+                      active ? 'bg-blue-600 text-white' : 'border border-gray-200 bg-white hover:bg-gray-50'
+                    }`}
+                  >
+                    {m.errorStateId && (
+                      <span
+                        title="P-Diagram Error State에서 가져옴"
+                        className={`shrink-0 text-xs ${active ? 'text-blue-100' : 'text-amber-600'}`}
+                      >
+                        ◇
+                      </span>
+                    )}
                     <span
-                      title="P-Diagram Error State에서 가져옴"
-                      className={`shrink-0 text-xs ${active ? 'text-blue-100' : 'text-amber-600'}`}
+                      className="flex-1 cursor-text"
+                      title="더블클릭해 편집"
+                      onDoubleClick={(e) => {
+                        e.stopPropagation()
+                        setEditModeId(m.id)
+                      }}
                     >
-                      ◇
+                      {m.text}
                     </span>
-                  )}
-                  <span className="flex-1">{m.text}</span>
-                </button>
+                  </button>
+                )}
                 <DeleteBtn
                   onClick={() => {
                     fmea.removeFailureMode(m.id)
                     if (m.id === modeId) setModeId(null)
+                    if (m.id === editModeId) setEditModeId(null)
                   }}
                 />
               </li>
@@ -191,6 +214,7 @@ export default function FailureEditor({ fmea }: { fmea: Fmea }) {
             <ChildList
               items={project.failureEffects.filter((e) => e.failureModeId === selectedMode.id)}
               onRemove={fmea.removeFailureEffect}
+              onSaveText={fmea.setFailureEffectText}
             />
           </>
         )}
@@ -217,6 +241,7 @@ export default function FailureEditor({ fmea }: { fmea: Fmea }) {
             <ChildList
               items={project.failureCauses.filter((c) => c.failureModeId === selectedMode.id)}
               onRemove={fmea.removeFailureCause}
+              onSaveText={fmea.setFailureCauseText}
               badgeOf={(c) => ((c as { noiseId?: string }).noiseId ? '◇' : null)}
             />
           </>
@@ -302,10 +327,12 @@ function ItemAdder({
 function ChildList<T extends { id: string; text: string }>({
   items,
   onRemove,
+  onSaveText,
   badgeOf,
 }: {
   items: T[]
   onRemove: (id: string) => void
+  onSaveText: (id: string, text: string) => void
   badgeOf?: (item: T) => string | null
 }) {
   return (
@@ -317,13 +344,14 @@ function ChildList<T extends { id: string; text: string }>({
             key={it.id}
             className="flex items-start justify-between gap-2 rounded-md border border-gray-200 px-2 py-1.5 text-sm"
           >
-            <span className="flex-1">
+            <span className="flex min-w-0 flex-1 items-start gap-1">
               {badge && (
-                <span title="P-Diagram에서 가져옴" className="mr-1 text-xs text-amber-600">
+                <span title="P-Diagram에서 가져옴" className="mt-0.5 shrink-0 text-xs text-amber-600">
                   {badge}
                 </span>
               )}
-              {it.text}
+              {/* 더블클릭 → 인라인 편집. 출처(◇) 있으면 편집 시 비미러 안내. */}
+              <EditableText text={it.text} onSave={(t) => onSaveText(it.id, t)} sourceNote={!!badge} />
             </span>
             <DeleteBtn onClick={() => onRemove(it.id)} />
           </li>
@@ -331,6 +359,89 @@ function ChildList<T extends { id: string; text: string }>({
       })}
       {items.length === 0 && <Empty text="항목이 없습니다." />}
     </ul>
+  )
+}
+
+// 텍스트 표시 ↔ 인라인 편집 토글(FE/FC용, 자체 상태). 더블클릭으로 편집 진입.
+function EditableText({
+  text,
+  onSave,
+  sourceNote,
+}: {
+  text: string
+  onSave: (t: string) => void
+  sourceNote?: boolean
+}) {
+  const [editing, setEditing] = useState(false)
+  if (editing)
+    return (
+      <InlineEditor
+        initial={text}
+        onSave={onSave}
+        onCancel={() => setEditing(false)}
+        sourceNote={sourceNote}
+      />
+    )
+  return (
+    <span className="min-w-0 flex-1 cursor-text break-words" title="더블클릭해 편집" onDoubleClick={() => setEditing(true)}>
+      {text}
+    </span>
+  )
+}
+
+// 공용 인라인 편집기(Step 2 노드 이름 편집과 동일 제스처): Enter 저장 / Shift+Enter 줄바꿈 /
+// Esc 취소 / 포커스 아웃 저장. 빈 값은 저장하지 않고 원문 유지. 여러 줄 입력 가능(textarea).
+// ◇ 출처(P-Diagram) 있는 항목이면 "출처와 별개로 저장" 안내 — 원본·포인터는 건드리지 않는다(비미러).
+function InlineEditor({
+  initial,
+  onSave,
+  onCancel,
+  sourceNote,
+}: {
+  initial: string
+  onSave: (t: string) => void
+  onCancel: () => void
+  sourceNote?: boolean
+}) {
+  const [draft, setDraft] = useState(initial)
+  const skip = useRef(false) // Esc로 종료할 때 뒤따르는 blur가 저장하지 않도록
+  function commit() {
+    const t = draft.trim()
+    if (t) onSave(t) // 빈 값은 저장 안 함(원문 유지)
+    onCancel()
+  }
+  return (
+    // 편집 중 클릭/포인터가 FM select 버튼으로 전파되지 않게 차단.
+    <div className="min-w-0 flex-1" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+      <textarea
+        autoFocus
+        rows={2}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault()
+            commit()
+          } else if (e.key === 'Escape') {
+            e.preventDefault()
+            skip.current = true
+            onCancel()
+          }
+        }}
+        onBlur={() => {
+          if (skip.current) {
+            skip.current = false
+            return
+          }
+          commit()
+        }}
+        className="w-full resize-y rounded-md border border-blue-500 px-2 py-1 text-sm outline-none"
+      />
+      {sourceNote && (
+        <p className="mt-0.5 text-[11px] text-amber-600">◇ 출처와 별개로 저장됩니다(원본 P-Diagram 불변).</p>
+      )}
+      <p className="mt-0.5 text-[10px] text-gray-400">Enter 저장 · Shift+Enter 줄바꿈 · Esc 취소</p>
+    </div>
   )
 }
 
