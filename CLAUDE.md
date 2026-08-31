@@ -131,5 +131,10 @@ DFMEA/PFMEA를 AIAG-VDA 7단계로 안내하고, 각 단계에서 예시를 보�
 - 줌/팬/드릴/캔버스크기 상태 저장(전부 세션 UI).
 - P-Diagram/인터페이스의 Excel·이미지 삽입(커뮤니티 SheetJS는 이미지 미지원).
 
+## 앱 이름·개발자
+- **앱 이름 = FMEA_Athena**(구 Jarvis에서 개명). 단일 출처 `lib/app.ts`(`APP_NAME`/`DEVELOPER`) — 화면(Step 7 Documentation 하단 작은 footer)·Excel 표지("작성 도구" 행, FMEA 팀/작성자와 구분되는 라벨)·`index.html` title·`package.json`(name `fmea-athena-christopher`, author)에서 사용.
+- **개발자 = Christopher, Lee**.
+- **localStorage 키(`fmea:project:v1`/`fmea:ui:v1`)에는 앱 이름 없음 → 개명 시 무변경**(키 바꾸면 기존 저장 데이터 유실). Excel 파일명도 프로젝트명 기준이라 앱 이름과 무관.
+
 ## 브랜치
-- 개발/푸시: `claude/create-chrisfmea-jarvis-repo-1oka90` (repo `strchrislee-cmd/FMEA_Jarvis_Christopher`).
+- 개발/푸시: `claude/create-chrisfmea-jarvis-repo-1oka90` (repo `strchrislee-cmd/FMEA_Jarvis_Christopher`). ★ 이 둘의 "jarvis"는 **실제 git 브랜치명·원격 리포명**이라 변경 금지(앱 개명과 별개, 그대로 유지).

@@ -1,5 +1,5 @@
-# FMEA_Jarvis_Christopher
-Chris가 FMEA를 쉽고 빠르게 수행할 수 있도록 도움주는 헬퍼
+# FMEA_Athena_Christopher
+Chris가 FMEA를 쉽고 빠르게 수행할 수 있도록 도움주는 헬퍼 (개발: Christopher, Lee)
 
 DFMEA/PFMEA를 AIAG-VDA 7단계로 안내하고, 각 단계 입력을 받아 AIAG-VDA 표준
 양식의 Excel(.xlsx)로 내보내는 로컬 웹앱입니다. (Vite + React + TypeScript + Tailwind)

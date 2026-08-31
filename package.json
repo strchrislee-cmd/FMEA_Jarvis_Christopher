@@ -1,8 +1,9 @@
 {
-  "name": "fmea-jarvis-christopher",
+  "name": "fmea-athena-christopher",
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "author": "Christopher, Lee",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

@@ -2,6 +2,7 @@ import type { useFmea } from '../state/useFmea'
 import { buildRiskRows } from '../lib/risk'
 import { exportExcel } from '../lib/excel'
 import { runChecks, type CheckResult, type CheckSeverity } from '../lib/checks'
+import { APP_NAME, DEVELOPER } from '../lib/app'
 
 type Fmea = ReturnType<typeof useFmea>
 
@@ -128,6 +129,11 @@ export default function DocumentationView({ fmea }: { fmea: Fmea }) {
             : `점검 위반 합계 ${totalViolations}건.`}
         </p>
       </section>
+
+      {/* 개발자 정보(비침습) — 작업 화면을 방해하지 않게 Step 7 하단에만 작게. */}
+      <footer className="border-t border-gray-100 pt-3 text-xs text-gray-400">
+        {APP_NAME} · 개발: {DEVELOPER}
+      </footer>
     </div>
   )
 }

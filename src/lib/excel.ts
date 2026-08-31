@@ -4,6 +4,7 @@ import { buildRiskRows, isSafetyRow, rpnBand } from './risk'
 import { mergeOptimizations, optimizationsForCause } from './optimization'
 import { levelLabels, levelLabelsBilingual, structurePath } from './structure'
 import { SOD_LABELS } from './help'
+import { APP_NAME, DEVELOPER } from './app'
 
 // ── 서식 헬퍼 (xlsx-js-style) ─────────────────────────────
 // 데이터·컬럼 구성·값은 그대로 두고 셀 스타일만 입힌다.
@@ -216,6 +217,8 @@ function buildCoverSheet(project: FmeaProject): XLSX.WorkSheet {
     ['Out-of-scope', planning.outOfScope],
     ['가정(Assumptions)', planning.assumptions],
     ['팀', planning.team.map((m) => m.name).join(', ')],
+    // FMEA 작성자(팀)와 구분되는 '도구' 항목 — 문서 작성자와 혼동되지 않게 라벨을 분리.
+    ['작성 도구', `${APP_NAME} (개발: ${DEVELOPER})`],
   ]
   const widths = [20, 64]
   const ws = XLSX.utils.aoa_to_sheet(data)
