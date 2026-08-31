@@ -5,11 +5,18 @@ interface Props {
   project: FmeaProject
   onMeta: (patch: Partial<FmeaProject['meta']>) => void
   onImport: (next: FmeaProject) => void
+  onNew: () => void
 }
 
-// 상단 툴바: 제목/유형/방식 토글 + JSON 내보내기/불러오기
-export default function Toolbar({ project, onMeta, onImport }: Props) {
+// 상단 툴바: 새로 시작 + 제목/유형 토글 + JSON 내보내기/불러오기
+export default function Toolbar({ project, onMeta, onImport, onNew }: Props) {
   const fileRef = useRef<HTMLInputElement>(null)
+
+  // 새로 시작: 모든 입력을 비운다(되돌릴 수 없음) → 확인 후 진행.
+  function startNew() {
+    if (window.confirm('모든 입력을 비우고 새로 시작합니다. 현재 데이터는 사라집니다.\n필요하면 먼저 "JSON 내보내기"로 저장하세요. 계속할까요?'))
+      onNew()
+  }
 
   function exportJson() {
     const blob = new Blob([JSON.stringify(project, null, 2)], {
@@ -60,6 +67,14 @@ export default function Toolbar({ project, onMeta, onImport }: Props) {
       />
 
       <div className="ml-auto flex gap-2">
+        <button
+          type="button"
+          onClick={startNew}
+          title="모든 입력을 비우고 처음부터 시작"
+          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
+        >
+          새로 시작
+        </button>
         <button
           type="button"
           onClick={exportJson}

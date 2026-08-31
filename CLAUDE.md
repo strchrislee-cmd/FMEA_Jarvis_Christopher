@@ -131,6 +131,10 @@ DFMEA/PFMEA를 AIAG-VDA 7단계로 안내하고, 각 단계에서 예시를 보�
 - 줌/팬/드릴/캔버스크기 상태 저장(전부 세션 UI).
 - P-Diagram/인터페이스의 Excel·이미지 삽입(커뮤니티 SheetJS는 이미지 미지원).
 
+## 데이터 로드·초기화
+- **예시 데이터는 하드코딩 아님**: 앱은 시작 시 `loadProject()`가 `localStorage['fmea:project:v1']`를 읽고, 없으면 `createEmptyProject()`(빈 상태) 반환. 전광판 등은 이전에 그 브라우저에서 JSON을 불러와 저장돼 있을 때만 다시 뜬다(파일이 아니라 브라우저 저장소). src·dist에 Signboard/전광판 문자열 0건.
+- **툴바 "새로 시작" 버튼**(`useFmea.newProject`): `createEmptyProject()`로 전 입력 비우고 Step 1로 → 저장 effect가 빈 프로젝트를 localStorage에 덮어써 예시 잔여도 제거. **되돌릴 수 없어 `window.confirm`으로 확인**(먼저 JSON 내보내기 안내). localStorage 키는 그대로 유지(삭제 아님·덮어쓰기).
+
 ## 앱 이름·개발자
 - **앱 이름 = FMEA_Athena**(구 Jarvis에서 개명). 단일 출처 `lib/app.ts`(`APP_NAME`/`DEVELOPER`) — 화면(Step 7 Documentation 하단 작은 footer)·Excel 표지("작성 도구" 행, FMEA 팀/작성자와 구분되는 라벨)·`index.html` title·`package.json`(name `fmea-athena-christopher`, author)에서 사용.
 - **개발자 = Christopher, Lee**.

@@ -17,7 +17,7 @@ import { STEPS } from '../lib/steps'
 import { newId } from '../lib/id'
 import { apKey } from '../lib/risk'
 import { emptyPDiagram, hasPDiagramContent, type PdListField } from '../lib/pdiagram'
-import { normalizeProject } from '../lib/factory'
+import { createEmptyProject, normalizeProject } from '../lib/factory'
 import {
   deleteStructureNode,
   removeFailureCauses,
@@ -338,6 +338,13 @@ export function useFmea() {
     setProject(normalizeProject(next))
   }
 
+  // 새로 시작: 모든 입력을 비운 빈 프로젝트로 초기화하고 Step 1로.
+  // (저장 effect가 빈 프로젝트를 localStorage에 덮어써 예시 잔여도 제거된다.)
+  function newProject() {
+    setProject(createEmptyProject())
+    setCurrentStep(0)
+  }
+
   return {
     project,
     currentStep,
@@ -380,5 +387,6 @@ export function useFmea() {
     goNext,
     goTo,
     importProject,
+    newProject,
   }
 }
