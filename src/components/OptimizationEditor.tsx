@@ -103,8 +103,9 @@ export default function OptimizationEditor({ fmea }: { fmea: Fmea }) {
         </ul>
       </div>
 
-      {/* 우: 선택 행의 FC 조치 편집 */}
-      <div className="rounded-lg border border-gray-200 p-3">
+      {/* 우: 선택 행의 FC 조치 편집. ≥900px에서 sticky(스크롤 시 따라옴) + 뷰포트 높이 제한 내부 스크롤
+          (패널이 길어져도 아래 항목까지 접근). 스크롤 컨테이너=main의 overflow-y-auto. */}
+      <div className="rounded-lg border border-gray-200 p-3 min-[900px]:sticky min-[900px]:top-4 min-[900px]:max-h-[calc(100vh-8rem)] min-[900px]:overflow-y-auto">
         {!selected ? (
           <p className="text-sm text-gray-400">왼쪽에서 리스크 행을 선택하세요. (행 더블클릭 = Step 5 상세)</p>
         ) : (
