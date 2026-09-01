@@ -6,7 +6,7 @@ DFMEA/PFMEA를 AIAG-VDA 7단계로 안내하고, 각 단계에서 예시를 보�
 
 ## 기술 스택 (변경 금지)
 - Vite + React + TypeScript + Tailwind
-- Excel 출력: SheetJS(xlsx)
+- Excel 출력: ExcelJS(4.4.0, 브라우저 UMD 번들 `dist/exceljs.min.js`를 Vite `browser` 필드로 로드). 구 xlsx-js-style에서 전환(이미지 삽입·freeze pane 지원). file:// 단일 HTML 인라인 동작 스모크 검증됨.
 - 저장: localStorage + JSON export/import (서버 DB 없음)
 - Phase 5의 Claude 연동만 별도 최소 Node/Express 프록시 사용
 
@@ -60,7 +60,7 @@ DFMEA/PFMEA를 AIAG-VDA 7단계로 안내하고, 각 단계에서 예시를 보�
 - `interfaces[]{ id, fromNodeId, toNodeId, label, kind: 신호|전원|기계 }`  (블록 간, 노드 id 쌍)
 - `layout: Record<nodeId,{x,y}>`  (블록 배치 좌표 위성, export 별도 섹션)
 - `pDiagrams[]{ id, structureNodeId, inputs[], controls[], noises[], outputs[], errorStates[] }`  (블록 단위 P-Diagram; 항목 `{id,text}`, noise `{id,text,category}`)
-- 파생 유틸: `lib/risk.ts`(computeRPN/apKey/computeAP/buildRiskRows, `RATINGS=[1,2,4,6,8,10]`), `lib/optimization.ts`(postRPN/AP·mergeOptimizations), `lib/diagram.ts`(autoBlockPositions/systemSlots/childBlockPositions/blockPositions), `lib/excel.ts`(SheetJS xlsx-js-style@1.2.0 고정).
+- 파생 유틸: `lib/risk.ts`(computeRPN/apKey/computeAP/buildRiskRows, `RATINGS=[1,2,4,6,8,10]`), `lib/optimization.ts`(postRPN/AP·mergeOptimizations), `lib/diagram.ts`(autoBlockPositions/systemSlots/childBlockPositions/blockPositions), `lib/excel.ts`(ExcelJS 4.4.0, 브라우저 UMD 번들; 다운로드는 writeBuffer→Blob→a.click).
 - UI 상태(currentStep 등)는 `fmea:ui:v1`(localStorage 별도 키). 도메인은 `fmea:project:v1`. 줌/팬/캔버스 크기/드릴 상태는 **저장 안 함(세션 UI)**.
 - `normalizeProject`(lib/factory.ts): 구버전/누락 필드 방어 로드(흰 화면 방지, 구버전 risks[] 등 무시).
 
@@ -71,7 +71,7 @@ DFMEA/PFMEA를 AIAG-VDA 7단계로 안내하고, 각 단계에서 예시를 보�
 - **Phase 3 (Step 5)**: S/O/D 척도표·현재관리·RPN·AP. **결정 (B): RiskItem 제거, S→FE / O·D·관리→FC, 행은 파생. RPN/AP 파생·미저장. AP는 조합표 룩업(구간 금지). optimization은 failureCauseId 앵커. 척도표/AP표는 하드코딩 없이 편집 가능.**
 - **Phase 4 (Step 6·7 + Excel)**: Optimization(전/후 나란히, 조치후값 별도보관) / Documentation(요약+내보내기) / **Excel(xlsx-js-style 고정, 시트=표지/FMEA/척도표, 1행=FE×FM×FC, 단일 조치는 숫자셀·다건만 "; " 병합).**
 - **Excel 헤더 한국어 병기**(`lib/excel.ts`, 값·컬럼 구성·순서 불변, 헤더 문구만): 구조=`levelLabelsBilingual`(영문은 `levelLabels` 재사용, 한글 병기는 `structure.ts` `LEVEL_KO`) → System(시스템)/… , DFMEA·PFMEA 각각. 실패=고장영향(FE)/고장모드(FM)/고장원인(FC). S/O/D=화면 `SOD_LABELS` 재사용. RPN(위험우선순위)·AP(조치우선순위), 조치후 컬럼 동일. **척도표 시트**: 헤더 병기 + **S/O/D 모두 빈 등급 행은 미출력**(하나라도 문구 있으면 출력), 생략분은 하단 "그 외 등급은 기준 미정의" 각주(A:D 병합). 회사 척도 프리셋은 등급 10/8/6/4/2/1을 S/O/D 전부 채움(8·4 포함) — 앱에서 비어 보이면 프리셋 미로드/사용자 편집 탓, "회사 기본값 불러오기"로 복원.
-- **Excel 서식 개선**(`lib/excel.ts`, 데이터·컬럼·값 불변, 스타일만): 전 셀 세로 가운데+wrapText, 텍스트 좌측·숫자(S/O/D/RPN/AP) 가운데 정렬, 내용 맞춤 열너비+행높이 추정. 헤더 굵게+가운데+테두리+**컬럼 그룹별 배경 톤**(구조/기능·실패·리스크·조치 4색). 의미색만: **RPN 연녹/연주황/연적**(`rpnBand`), **AP H연적·M연주황·L연녹**, **S=9·10 행의 S셀 진한 강조+굵은 테두리**(`isSafetyRow`); 그 외 셀 무채색. 얇은 테두리+그룹경계 medium 세로선. 헤더행 **AutoFilter**(정렬/필터). 척도표·표지도 서식(표지 프로젝트명 16pt). **한계: freeze pane은 pinned xlsx-js-style(0.18.5) 라이터가 미출력 → AutoFilter로 대체(스크롤 고정은 미지원).** 검증은 앱 다운로드 캡처 → 생성 xlsx의 값(불변)·styles.xml 실측.
+- **Excel 서식 개선**(`lib/excel.ts`, 데이터·컬럼·값 불변, 스타일만): 전 셀 세로 가운데+wrapText, 텍스트 좌측·숫자(S/O/D/RPN/AP) 가운데 정렬, 내용 맞춤 열너비+행높이 추정. 헤더 굵게+가운데+테두리+**컬럼 그룹별 배경 톤**(구조/기능·실패·리스크·조치 4색). 의미색만: **RPN 연녹/연주황/연적**(`rpnBand`), **AP H연적·M연주황·L연녹**, **S=9·10 행의 S셀 진한 강조+굵은 테두리**(`isSafetyRow`); 그 외 셀 무채색. 얇은 테두리+그룹경계 medium 세로선. 헤더행 **AutoFilter**(정렬/필터) + **freeze pane**(ExcelJS 전환으로 헤더행 고정 `views:[{state:'frozen',ySplit:1}]` 실현 — 구 라이브러리 한계 해소). 척도표·표지도 서식(표지 프로젝트명 16pt). **ExcelJS 전환 시 서식 전부 재현**(fill/border/wrapText/열너비·행높이/AutoFilter) 스모크·앱 다운로드 XML 실측 검증. 스타일 적용은 `paint(cell,{fill,border,align,font})` 헬퍼로 일원화(색 ARGB 8-hex 그대로).
 - **행 높이 CJK 폭 반영**(`rowHeights`, 표지·본표·척도표 공통): 한글·CJK·전각을 폭 2로 세어(`displayWidth`, code≥0x1100) 줄 수를 정확히 추정 — 한글을 1로 세던 과소추정으로 표지 범위(Scope)·가정(Assumptions)·긴 척도 문구가 잘리던 문제 해결. 개행(`\n`)도 줄로 계산, 상한 6→40줄. 표지 내용 열 64→72. 검증은 생성 .xlsx의 sheetN.xml `ht` 실측 vs 필요 줄 수(3개 시트 전 행 통과).
 - **단일 HTML 빌드**: `dist/index.html` 하나로 인라인(file:// 실행). vite-plugin-singlefile은 Vite8/rolldown 충돌 → 커스텀 플러그인.
 - **가이드/도움말**: `lib/help.ts`(필드키→{oneLiner,placeholder,detail(좋은/나쁜 예)}) + `<FieldHelp>`(? 팝오버). **가이드 예시는 `lib/steps.ts` 한 곳에 중앙화** — DFMEA/PFMEA 각각 **Step 1~7을 관통하는 하나의 사례**(DFMEA=전동 윈도우→윈도우 레귤레이터→구동 모터→브러시 마모, PFMEA=전동 윈도우 도어 조립→레귤레이터 체결→토크 미달). `STEP1_EXAMPLES`(4칸 세트)+`STEPS[].example`(단계 원라이너, 유형별)이 같은 제품·항목을 이어서 쓰고, GuidePanel에 `EXAMPLE_THREAD_NOTE`("Step 1~7 관통") 표시 + "예시 채우기". 핸드북 복붙 금지·자체 작성.

@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx-js-style'
+import ExcelJS from 'exceljs'
 import type { FmeaProject } from '../types/fmea'
 import { buildRiskRows, isSafetyRow, rpnBand } from './risk'
 import { mergeOptimizations, NO_ACTION_STATUS_LABEL, optimizationsForCause } from './optimization'
@@ -6,12 +6,14 @@ import { levelLabels, levelLabelsBilingual, structurePath } from './structure'
 import { SOD_LABELS } from './help'
 import { APP_NAME, DEVELOPER } from './app'
 
-// ── 서식 헬퍼 (xlsx-js-style) ─────────────────────────────
-// 데이터·컬럼 구성·값은 그대로 두고 셀 스타일만 입힌다.
+// ── 서식 헬퍼 (ExcelJS) ───────────────────────────────────
+// 데이터·컬럼 구성·값·색은 그대로 두고 스타일만 ExcelJS API로 표현한다.
+// 색은 ARGB 8-hex(기존 xlsx-js-style에서 쓰던 값 그대로 재사용).
 const LINE = { thin: 'FFBFBFBF', med: 'FF808080' }
-const edge = (rgb: string, style: 'thin' | 'medium') => ({ style, color: { rgb } })
+type BorderStyle = 'thin' | 'medium'
+const edge = (argb: string, style: BorderStyle) => ({ style, color: { argb } })
 // 셀 테두리: 기본 얇게. leftMed=그룹 경계 세로선(약간 굵게), all=사면 굵게(안전 강조).
-function borderOf(leftMed = false, all = false) {
+function borderOf(leftMed = false, all = false): Partial<ExcelJS.Borders> {
   const thin = edge(LINE.thin, 'thin')
   const med = edge(LINE.med, 'medium')
   return {
@@ -21,12 +23,31 @@ function borderOf(leftMed = false, all = false) {
     right: all ? med : thin,
   }
 }
-const solid = (rgb: string) => ({ patternType: 'solid', fgColor: { rgb } })
 
-function put(ws: XLSX.WorkSheet, r: number, c: number, s: object) {
-  const addr = XLSX.utils.encode_cell({ r, c })
-  if (!ws[addr]) ws[addr] = { t: 's', v: '' } // 빈 셀도 만들어 테두리를 잇는다
-  ws[addr].s = s
+// 셀 스타일 일괄 적용. fill(ARGB)·테두리·정렬(세로 가운데+wrapText 기본)·폰트.
+interface Paint {
+  fill?: string
+  leftMed?: boolean
+  all?: boolean
+  h?: 'left' | 'center'
+  bold?: boolean
+  size?: number
+}
+function paint(cell: ExcelJS.Cell, o: Paint): void {
+  if (o.fill) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: o.fill } }
+  cell.border = borderOf(o.leftMed, o.all)
+  cell.alignment = { vertical: 'middle', horizontal: o.h ?? 'left', wrapText: true }
+  if (o.bold || o.size) cell.font = { ...(o.bold ? { bold: true } : {}), ...(o.size ? { size: o.size } : {}) }
+}
+
+// 시트에 2차원 배열을 채우고 열너비·행높이를 설정한다(공통).
+function fill2d(ws: ExcelJS.Worksheet, data: (string | number)[][], widths: number[], headerPt = 24): void {
+  ws.columns = widths.map((w) => ({ width: w }))
+  const heights = rowHeights(data, widths, headerPt)
+  data.forEach((rowArr, r) => {
+    const row = ws.addRow(rowArr)
+    row.height = heights[r].hpt
+  })
 }
 
 // 표시 폭: 한글·CJK·전각은 약 2칸, 그 외 1칸(엑셀 열 너비는 반각 기준이라 한글을 1로 세면 줄 수 과소추정→잘림).
@@ -85,7 +106,8 @@ interface RowMeta {
   postAP: string | number
 }
 
-function buildMainSheet(project: FmeaProject): XLSX.WorkSheet {
+function buildMainSheet(wb: ExcelJS.Workbook, project: FmeaProject): void {
+  const ws = wb.addWorksheet('FMEA')
   // 헤더 라벨은 한국어 병기(값·컬럼 구성·순서는 불변). 구조 라벨은 유형별 레벨 맵 재사용,
   // S/O/D는 화면의 SOD_LABELS 재사용(중복 정의 없음).
   const lv = levelLabelsBilingual(project.meta.type)
@@ -127,54 +149,40 @@ function buildMainSheet(project: FmeaProject): XLSX.WorkSheet {
     meta.push({ s: r.s, rpn: r.rpn ?? '', ap: apCell, postRPN: m.postRPN, postAP: m.postAP })
   }
 
-  const ws = XLSX.utils.aoa_to_sheet(data)
-  ws['!cols'] = MAIN_WIDTHS.map((wch) => ({ wch }))
-  ws['!rows'] = rowHeights(data, MAIN_WIDTHS, 32) // 병기 헤더 2줄 여유
-  // 헤더 필터(정렬/필터 가능) — freeze pane은 이 라이브러리 라이터가 미지원.
-  ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: data.length - 1, c: header.length - 1 } }) }
+  fill2d(ws, data, MAIN_WIDTHS, 32) // 병기 헤더 2줄 여유
+  // 헤더행 고정(freeze) + 필터. (기존 라이브러리는 freeze 미지원이었으나 ExcelJS는 가능)
+  ws.views = [{ state: 'frozen', ySplit: 1 }]
+  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: header.length } }
 
   for (let c = 0; c < header.length; c++) {
     const leftMed = GROUP_START.has(c)
     // 헤더
-    put(ws, 0, c, {
-      font: { bold: true },
-      fill: solid(headerFill(c)),
-      alignment: { vertical: 'center', horizontal: 'center', wrapText: true },
-      border: borderOf(leftMed),
-    })
+    paint(ws.getCell(1, c + 1), { fill: headerFill(c), h: 'center', bold: true, leftMed })
     // 데이터
     for (let di = 0; di < meta.length; di++) {
       const r = di + 1
       const mrow = meta[di]
-      const align = { vertical: 'center', horizontal: NUMERIC.has(c) ? 'center' : 'left', wrapText: true }
-      let fill: string | null = null
-      if (c === 12 && typeof mrow.rpn === 'number') fill = rpnFill(mrow.rpn)
-      else if (c === 22 && typeof mrow.postRPN === 'number') fill = rpnFill(mrow.postRPN)
-      else if (c === 13) fill = apFill(mrow.ap)
-      else if (c === 23 && typeof mrow.postAP === 'string') fill = apFill(mrow.postAP)
+      const cell = ws.getCell(r + 1, c + 1)
+      const h: 'left' | 'center' = NUMERIC.has(c) ? 'center' : 'left'
 
       // S 컬럼 안전 강조(S=9·10): 굵은 사면 테두리 + 진한 채움 + 굵게. RPN과 무관.
       if (c === 5 && isSafetyRow(mrow.s)) {
-        put(ws, r, c, {
-          font: { bold: true },
-          fill: solid('FFF2A6A6'),
-          alignment: align,
-          border: borderOf(false, true),
-        })
+        paint(cell, { fill: 'FFF2A6A6', h, bold: true, all: true })
         continue
       }
-      put(ws, r, c, {
-        alignment: align,
-        border: borderOf(leftMed),
-        ...(fill ? { fill: solid(fill) } : {}),
-      })
+      let fillArgb: string | null = null
+      if (c === 12 && typeof mrow.rpn === 'number') fillArgb = rpnFill(mrow.rpn)
+      else if (c === 22 && typeof mrow.postRPN === 'number') fillArgb = rpnFill(mrow.postRPN)
+      else if (c === 13) fillArgb = apFill(mrow.ap)
+      else if (c === 23 && typeof mrow.postAP === 'string') fillArgb = apFill(mrow.postAP)
+      paint(cell, { fill: fillArgb ?? undefined, h, leftMed })
     }
   }
-  return ws
 }
 
 // ── 척도표 시트 ───────────────────────────────────────────
-function buildScaleSheet(project: FmeaProject): XLSX.WorkSheet {
+function buildScaleSheet(wb: ExcelJS.Workbook, project: FmeaProject): void {
+  const ws = wb.addWorksheet('척도표')
   const t = project.scales[project.meta.type]
   const header = ['등급', SOD_LABELS.S, SOD_LABELS.O, SOD_LABELS.D]
   // 기준 문구가 하나도 없는 등급 행은 출력하지 않는다(빈 행이 절반이면 판독 저해).
@@ -187,42 +195,31 @@ function buildScaleSheet(project: FmeaProject): XLSX.WorkSheet {
     else omitted++
   }
   const data: (string | number)[][] = [header, ...gradeRows]
-  const gradeEnd = data.length // 등급 행 끝(각주 제외)
+  const gradeEnd = data.length // 등급 행 끝(각주 제외, 1-indexed 행 = gradeEnd)
   if (omitted > 0) data.push(['그 외 등급은 기준 미정의', '', '', ''])
 
   const widths = [6, 46, 46, 46]
-  const ws = XLSX.utils.aoa_to_sheet(data)
-  ws['!cols'] = widths.map((wch) => ({ wch }))
-  ws['!rows'] = rowHeights(data, widths)
+  fill2d(ws, data, widths)
 
   for (let c = 0; c < header.length; c++) {
-    put(ws, 0, c, {
-      font: { bold: true },
-      fill: solid('FFD9E1F2'),
-      alignment: { vertical: 'center', horizontal: 'center', wrapText: true },
-      border: borderOf(),
-    })
+    paint(ws.getCell(1, c + 1), { fill: 'FFD9E1F2', h: 'center', bold: true })
     for (let r = 1; r < gradeEnd; r++) {
-      put(ws, r, c, {
-        alignment: { vertical: 'center', horizontal: c === 0 ? 'center' : 'left', wrapText: true },
-        border: borderOf(),
-      })
+      paint(ws.getCell(r + 1, c + 1), { h: c === 0 ? 'center' : 'left' })
     }
   }
   // 각주 한 줄(A:D 병합, 회색 이탤릭) — 비어있는 등급을 대체.
   if (omitted > 0) {
-    const fr = gradeEnd
-    ws['!merges'] = [{ s: { r: fr, c: 0 }, e: { r: fr, c: 3 } }]
-    put(ws, fr, 0, {
-      font: { italic: true, color: { rgb: 'FF808080' } },
-      alignment: { vertical: 'center', horizontal: 'left', wrapText: true },
-    })
+    const fr = gradeEnd + 1 // 1-indexed 각주 행
+    ws.mergeCells(fr, 1, fr, 4)
+    const cell = ws.getCell(fr, 1)
+    cell.font = { italic: true, color: { argb: 'FF808080' } }
+    cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true }
   }
-  return ws
 }
 
 // ── 표지 시트 ─────────────────────────────────────────────
-function buildCoverSheet(project: FmeaProject): XLSX.WorkSheet {
+function buildCoverSheet(wb: ExcelJS.Workbook, project: FmeaProject): void {
+  const ws = wb.addWorksheet('표지')
   const d = new Date()
   const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   const { meta, planning } = project
@@ -242,35 +239,14 @@ function buildCoverSheet(project: FmeaProject): XLSX.WorkSheet {
     ['작성 도구', `${APP_NAME} (개발: ${DEVELOPER})`],
   ]
   const widths = [18, 72] // 항목/내용 — 내용 컬럼을 넓혀 긴 범위·가정 텍스트의 줄 수를 줄인다
-  const ws = XLSX.utils.aoa_to_sheet(data)
-  ws['!cols'] = widths.map((wch) => ({ wch }))
-  ws['!rows'] = rowHeights(data, widths)
+  fill2d(ws, data, widths)
 
-  // 헤더행
-  for (let c = 0; c < 2; c++) {
-    put(ws, 0, c, {
-      font: { bold: true },
-      fill: solid('FFD9E1F2'),
-      alignment: { vertical: 'center', horizontal: 'center' },
-      border: borderOf(),
-    })
-  }
+  for (let c = 0; c < 2; c++) paint(ws.getCell(1, c + 1), { fill: 'FFD9E1F2', h: 'center', bold: true })
   for (let r = 1; r < data.length; r++) {
-    // 항목 라벨(좌열) 굵게
-    put(ws, r, 0, {
-      font: { bold: true },
-      fill: solid('FFF2F2F2'),
-      alignment: { vertical: 'center', horizontal: 'left' },
-      border: borderOf(),
-    })
-    // 내용(우열) — 프로젝트명 값만 크게
-    put(ws, r, 1, {
-      font: r === 1 ? { bold: true, sz: 16 } : {},
-      alignment: { vertical: 'center', horizontal: 'left', wrapText: true },
-      border: borderOf(),
-    })
+    paint(ws.getCell(r + 1, 1), { fill: 'FFF2F2F2', bold: true, h: 'left' })
+    // 내용(우열) — 프로젝트명 값만 크게(16pt)
+    paint(ws.getCell(r + 1, 2), { h: 'left', ...(r === 1 ? { bold: true, size: 16 } : {}) })
   }
-  return ws
 }
 
 // 파일명: {프로젝트명}_{DFMEA|PFMEA}_{YYYYMMDD}.xlsx
@@ -281,10 +257,20 @@ function fileName(project: FmeaProject): string {
   return `${title}_${project.meta.type}_${ymd}.xlsx`
 }
 
-export function exportExcel(project: FmeaProject): void {
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, buildCoverSheet(project), '표지')
-  XLSX.utils.book_append_sheet(wb, buildMainSheet(project), 'FMEA')
-  XLSX.utils.book_append_sheet(wb, buildScaleSheet(project), '척도표')
-  XLSX.writeFile(wb, fileName(project))
+export async function exportExcel(project: FmeaProject): Promise<void> {
+  const wb = new ExcelJS.Workbook()
+  buildCoverSheet(wb, project)
+  buildMainSheet(wb, project)
+  buildScaleSheet(wb, project)
+  // ExcelJS는 writeFile(Node)만 자동 저장 → 브라우저는 Blob으로 다운로드(file:// 단일 HTML 호환).
+  const buf = await wb.xlsx.writeBuffer()
+  const blob = new Blob([buf], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = fileName(project)
+  a.click()
+  URL.revokeObjectURL(url)
 }
