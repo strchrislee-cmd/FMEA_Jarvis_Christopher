@@ -29,7 +29,18 @@ function put(ws: XLSX.WorkSheet, r: number, c: number, s: object) {
   ws[addr].s = s
 }
 
-// 행 높이 추정(줄바꿈이 가지런하게 보이도록). 열 너비(글자수) 대비 텍스트 길이로 줄 수 추정.
+// 표시 폭: 한글·CJK·전각은 약 2칸, 그 외 1칸(엑셀 열 너비는 반각 기준이라 한글을 1로 세면 줄 수 과소추정→잘림).
+function displayWidth(txt: string): number {
+  let w = 0
+  for (const ch of txt) {
+    const code = ch.codePointAt(0) ?? 0
+    w += code >= 0x1100 ? 2 : 1 // Hangul Jamo(0x1100)~ / CJK / 전각 근사
+  }
+  return w
+}
+
+// 행 높이 추정(줄바꿈이 가지런하게 보이도록). 열 너비(반각 글자수) 대비 표시 폭으로 줄 수 추정.
+// 명시적 개행(\n)도 줄로 세고, 한글 폭 반영. 상한을 넉넉히 둬 긴 범위/가정 텍스트가 잘리지 않게.
 function rowHeights(rows: (string | number)[][], widths: number[], headerPt = 24): { hpt: number }[] {
   return rows.map((row, i) => {
     if (i === 0) return { hpt: headerPt }
@@ -38,9 +49,11 @@ function rowHeights(rows: (string | number)[][], widths: number[], headerPt = 24
       const txt = String(row[c] ?? '')
       if (!txt) continue
       const w = Math.max(4, (widths[c] ?? 10) - 1)
-      lines = Math.max(lines, Math.ceil(txt.length / w))
+      let cellLines = 0
+      for (const seg of txt.split('\n')) cellLines += Math.max(1, Math.ceil(displayWidth(seg) / w))
+      lines = Math.max(lines, cellLines)
     }
-    return { hpt: Math.min(6, lines) * 15 + 4 }
+    return { hpt: Math.min(40, lines) * 15 + 4 }
   })
 }
 
@@ -228,7 +241,7 @@ function buildCoverSheet(project: FmeaProject): XLSX.WorkSheet {
     // FMEA 작성자(팀)와 구분되는 '도구' 항목 — 문서 작성자와 혼동되지 않게 라벨을 분리.
     ['작성 도구', `${APP_NAME} (개발: ${DEVELOPER})`],
   ]
-  const widths = [20, 64]
+  const widths = [18, 72] // 항목/내용 — 내용 컬럼을 넓혀 긴 범위·가정 텍스트의 줄 수를 줄인다
   const ws = XLSX.utils.aoa_to_sheet(data)
   ws['!cols'] = widths.map((wch) => ({ wch }))
   ws['!rows'] = rowHeights(data, widths)
