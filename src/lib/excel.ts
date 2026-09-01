@@ -5,6 +5,7 @@ import { mergeOptimizations, NO_ACTION_STATUS_LABEL, optimizationsForCause } fro
 import { levelLabels, levelLabelsBilingual, structurePath } from './structure'
 import { SOD_LABELS } from './help'
 import { APP_NAME, DEVELOPER } from './app'
+import { diagramSvg } from './diagramSvg'
 
 // ── 서식 헬퍼 (ExcelJS) ───────────────────────────────────
 // 데이터·컬럼 구성·값·색은 그대로 두고 스타일만 ExcelJS API로 표현한다.
@@ -249,6 +250,48 @@ function buildCoverSheet(wb: ExcelJS.Workbook, project: FmeaProject): void {
   }
 }
 
+// ── 다이어그램 이미지 시트(4번째) ────────────────────────
+// 정적 SVG(diagramSvg)를 canvas로 2x 래스터→PNG로 임베드(기존 PNG 내보내기의 SVG→canvas 경로 재사용).
+function svgToPngBase64(svg: string, w: number, h: number, scale = 2): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const img = new Image()
+    img.onload = () => {
+      const cv = document.createElement('canvas')
+      cv.width = Math.round(w * scale)
+      cv.height = Math.round(h * scale)
+      const cx = cv.getContext('2d')
+      if (!cx) {
+        URL.revokeObjectURL(url)
+        reject(new Error('no 2d context'))
+        return
+      }
+      cx.scale(scale, scale)
+      cx.drawImage(img, 0, 0)
+      URL.revokeObjectURL(url)
+      resolve(cv.toDataURL('image/png').split(',')[1]) // data: 접두사 제거(ExcelJS base64)
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('svg load failed'))
+    }
+    img.src = url
+  })
+}
+
+async function buildDiagramSheet(wb: ExcelJS.Workbook, project: FmeaProject): Promise<void> {
+  const dg = diagramSvg(project)
+  if (!dg) return // 구조가 없으면 시트 생략
+  const ws = wb.addWorksheet('다이어그램')
+  ws.getCell('A1').value = `Step 2 블록다이어그램 · ${project.meta.type}`
+  ws.getCell('A1').font = { bold: true }
+  const b64 = await svgToPngBase64(dg.svg, dg.width, dg.height, 2)
+  const id = wb.addImage({ base64: b64, extension: 'png' })
+  // A2 아래에 자연 크기(1x)로 배치 — 2x 래스터라 인쇄·확대 시 선명.
+  ws.addImage(id, { tl: { col: 0, row: 1 }, ext: { width: dg.width, height: dg.height } })
+}
+
 // 파일명: {프로젝트명}_{DFMEA|PFMEA}_{YYYYMMDD}.xlsx
 function fileName(project: FmeaProject): string {
   const d = new Date()
@@ -262,6 +305,7 @@ export async function exportExcel(project: FmeaProject): Promise<void> {
   buildCoverSheet(wb, project)
   buildMainSheet(wb, project)
   buildScaleSheet(wb, project)
+  await buildDiagramSheet(wb, project) // 4번째: Step 2 블록다이어그램 이미지(구조 있을 때만)
   // ExcelJS는 writeFile(Node)만 자동 저장 → 브라우저는 Blob으로 다운로드(file:// 단일 HTML 호환).
   const buf = await wb.xlsx.writeBuffer()
   const blob = new Blob([buf], {

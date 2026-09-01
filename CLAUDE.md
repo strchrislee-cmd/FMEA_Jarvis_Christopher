@@ -72,6 +72,7 @@ DFMEA/PFMEA를 AIAG-VDA 7단계로 안내하고, 각 단계에서 예시를 보�
 - **Phase 4 (Step 6·7 + Excel)**: Optimization(전/후 나란히, 조치후값 별도보관) / Documentation(요약+내보내기) / **Excel(xlsx-js-style 고정, 시트=표지/FMEA/척도표, 1행=FE×FM×FC, 단일 조치는 숫자셀·다건만 "; " 병합).**
 - **Excel 헤더 한국어 병기**(`lib/excel.ts`, 값·컬럼 구성·순서 불변, 헤더 문구만): 구조=`levelLabelsBilingual`(영문은 `levelLabels` 재사용, 한글 병기는 `structure.ts` `LEVEL_KO`) → System(시스템)/… , DFMEA·PFMEA 각각. 실패=고장영향(FE)/고장모드(FM)/고장원인(FC). S/O/D=화면 `SOD_LABELS` 재사용. RPN(위험우선순위)·AP(조치우선순위), 조치후 컬럼 동일. **척도표 시트**: 헤더 병기 + **S/O/D 모두 빈 등급 행은 미출력**(하나라도 문구 있으면 출력), 생략분은 하단 "그 외 등급은 기준 미정의" 각주(A:D 병합). 회사 척도 프리셋은 등급 10/8/6/4/2/1을 S/O/D 전부 채움(8·4 포함) — 앱에서 비어 보이면 프리셋 미로드/사용자 편집 탓, "회사 기본값 불러오기"로 복원.
 - **Excel 서식 개선**(`lib/excel.ts`, 데이터·컬럼·값 불변, 스타일만): 전 셀 세로 가운데+wrapText, 텍스트 좌측·숫자(S/O/D/RPN/AP) 가운데 정렬, 내용 맞춤 열너비+행높이 추정. 헤더 굵게+가운데+테두리+**컬럼 그룹별 배경 톤**(구조/기능·실패·리스크·조치 4색). 의미색만: **RPN 연녹/연주황/연적**(`rpnBand`), **AP H연적·M연주황·L연녹**, **S=9·10 행의 S셀 진한 강조+굵은 테두리**(`isSafetyRow`); 그 외 셀 무채색. 얇은 테두리+그룹경계 medium 세로선. 헤더행 **AutoFilter**(정렬/필터) + **freeze pane**(ExcelJS 전환으로 헤더행 고정 `views:[{state:'frozen',ySplit:1}]` 실현 — 구 라이브러리 한계 해소). 척도표·표지도 서식(표지 프로젝트명 16pt). **ExcelJS 전환 시 서식 전부 재현**(fill/border/wrapText/열너비·행높이/AutoFilter) 스모크·앱 다운로드 XML 실측 검증. 스타일 적용은 `paint(cell,{fill,border,align,font})` 헬퍼로 일원화(색 ARGB 8-hex 그대로).
+- **다이어그램 이미지 시트(4번째)**: Step 2 블록다이어그램을 데이터→정적 SVG(`lib/diagramSvg.ts`, 화면 렌더와 동일 기하·색·배지/P칩/화살표, 편집요소 없음)로 그린 뒤 `excel.ts`가 canvas로 **2x 래스터→PNG**(기존 PNG 내보내기의 SVG→canvas 경로 재사용)해 `wb.addImage`로 임베드. 구조가 없으면 시트 생략. file://에서 임베드·렌더 XML/PNG 실측 검증.
 - **행 높이 CJK 폭 반영**(`rowHeights`, 표지·본표·척도표 공통): 한글·CJK·전각을 폭 2로 세어(`displayWidth`, code≥0x1100) 줄 수를 정확히 추정 — 한글을 1로 세던 과소추정으로 표지 범위(Scope)·가정(Assumptions)·긴 척도 문구가 잘리던 문제 해결. 개행(`\n`)도 줄로 계산, 상한 6→40줄. 표지 내용 열 64→72. 검증은 생성 .xlsx의 sheetN.xml `ht` 실측 vs 필요 줄 수(3개 시트 전 행 통과).
 - **단일 HTML 빌드**: `dist/index.html` 하나로 인라인(file:// 실행). vite-plugin-singlefile은 Vite8/rolldown 충돌 → 커스텀 플러그인.
 - **가이드/도움말**: `lib/help.ts`(필드키→{oneLiner,placeholder,detail(좋은/나쁜 예)}) + `<FieldHelp>`(? 팝오버). **가이드 예시는 `lib/steps.ts` 한 곳에 중앙화** — DFMEA/PFMEA 각각 **Step 1~7을 관통하는 하나의 사례**(DFMEA=전동 윈도우→윈도우 레귤레이터→구동 모터→브러시 마모, PFMEA=전동 윈도우 도어 조립→레귤레이터 체결→토크 미달). `STEP1_EXAMPLES`(4칸 세트)+`STEPS[].example`(단계 원라이너, 유형별)이 같은 제품·항목을 이어서 쓰고, GuidePanel에 `EXAMPLE_THREAD_NOTE`("Step 1~7 관통") 표시 + "예시 채우기". 핸드북 복붙 금지·자체 작성.
@@ -130,7 +131,7 @@ DFMEA/PFMEA를 AIAG-VDA 7단계로 안내하고, 각 단계에서 예시를 보�
 - 서로 다른 Subsystem의 Component 간 연결, Subsystem↔Component 교차레벨 연결.
 - 드래그로 소속 변경(reparent), 3레벨 초과 중첩, 블록 안 미니어처 미리보기.
 - 줌/팬/드릴/캔버스크기 상태 저장(전부 세션 UI).
-- P-Diagram/인터페이스의 Excel·이미지 삽입(커뮤니티 SheetJS는 이미지 미지원).
+- P-Diagram 자체의 Excel 표기(인터페이스는 Step 2 다이어그램 이미지 시트에 반영됨; P-Diagram 5방향 표기는 후속).
 
 ## Step 6에서 Step 5 리스크 상세 조회
 - **요약에 현재 관리 텍스트(읽기 전용)**: 전(현재) 요약 하단에 예방관리(O색)·검출관리(D색) 표시. 비면 **"관리 없음"**(앰버) 명시 — 빈칸 금지(관리 부재가 조치 불필요 판단 근거). 데이터 무변경.
