@@ -134,7 +134,9 @@ DFMEA/PFMEA를 AIAG-VDA 7단계로 안내하고, 각 단계에서 예시를 보�
 ## Step 6 우측 패널 개선(색·AP 라벨·버튼화)
 - **리스크 표시 원자 단일 출처 `components/riskBadges.tsx`** — `SafetyBadge/RpnPill/ApPill/ScoreChip` + 색맵(`DIM_STYLE/BAND_STYLE/AP_STYLE/AP_KO/AP_ACTION`)을 Step 5(`RiskEditor`)에서 추출해 이관. RiskEditor·OptimizationEditor 둘 다 여기서 import(중복 정의 금지 → 두 화면 색·배지 항상 일치). `RiskEditor.ScoreLine`도 `ScoreChip` 재사용. **ApPill은 등급 한글 병기 포함**(`M (중간) · 조치 권고`) — Step 5 표/카드에도 동일 반영.
 - **전(현재) 요약 색 적용**: 단색 텍스트 → `ScoreChip`(S 적/O 주황/D 보라, hover=`project.scales` 척도문구=Step5 동일 소스) + `RpnPill`(구간색·아이콘) + `ApPill`(등급+조치수준+apTable 사유 라벨) + 안전행 `SafetyBadge`. 색+수치·라벨 병행.
-- **조치 불필요 버튼화**: 상시 표시 제거 → "+ 조치 추가"·"+ 조치 불필요" 나란히. 미검토 행은 버튼만(입력란 없음), "+ 조치 불필요" 클릭 시에만 프리셋 editor 표시(이미 판단 있으면 자동). **상호배타**: 조치 있으면 불필요 버튼 disabled, 판단 있으면 조치추가 disabled. "판단 취소(미검토)"로 해제+접기. `OptPanel`은 `key={rowKey}`로 행 전환 시 열림상태 초기화. 데이터·계산 불변.
+- **조치 불필요 버튼화**: 상시 표시 제거 → "+ 조치 추가"·"+ 조치 불필요" 나란히. 미검토 행은 버튼만(입력란 없음), "+ 조치 불필요" 클릭 시에만 프리셋 editor 표시(이미 판단 있으면 자동). `OptPanel`은 `key={rowKey}`로 행 전환 시 열림상태 초기화. 데이터·계산 불변.
+- **조치 ↔ 조치 불필요 상호 전환**(상호배타 유지, 동시 존재 금지): 버튼 disabled 대신 **클릭 시 전환**. "+ 조치 추가"→판단 자동 해제(확인창 없음, 사유 텍스트 잃음을 위 앰버 안내로 고지) 후 조치 1건 생성. "+ 조치 불필요"→조치 있으면 **확인창**(조치 내용 삭제 경고) 후 그 FC의 opt 전부 제거하고 editor 표시. "판단 취소(미검토)"는 눈에 띄는 아웃라인 버튼으로.
+- **배지 정렬**(riskBadges 공통): 공통 크기 상수 `PILL`(`inline-flex items-center px-2 py-0.5 text-xs leading-none`)로 S/O/D·RPN·AP 높이·글자 통일. 요약 행은 `items-center`(좁으면 wrap). RPN 아이콘 `▁▄█`→**`▼◆▲`**(세로 중앙, 앞 여백처럼 안 보임). Step 6 요약은 `ApPill hideLabel` + AP 사유 라벨을 배지 아래 별도 줄로 분리(정렬 유지). Step 5도 동일 반영.
 
 ## Step 6 "조치 불필요" 사유 프리셋
 - **모델 = `FailureCause.noActionReason?`(optional)** — optimizations 아님. 근거: O/D·현재관리와 같은 FC 귀속이라 정합, optimizations에 넣으면 `hasAction`·`postRPN`·`mergeOptimizations` 오작동. optional·가산이라 계산·정규화 무파급('조치'와 '조치 안 함 판단'을 자료구조로 분리).

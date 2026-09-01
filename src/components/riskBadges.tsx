@@ -11,12 +11,15 @@ export const DIM_STYLE: Record<ScaleDim, { badge: string; border: string; text: 
   O: { badge: 'bg-orange-100 text-orange-800', border: 'border-orange-300', text: 'text-orange-700' },
   D: { badge: 'bg-violet-100 text-violet-800', border: 'border-violet-300', text: 'text-violet-700' },
 }
-// RPN 구간 → 색상·라벨·아이콘(색상만으로 정보 전달 금지). 아이콘=막대 높이 은유(위험 클수록 높음).
+// RPN 구간 → 색상·라벨·아이콘(색상만으로 정보 전달 금지). 아이콘=방향 은유(낮음▼/중간◆/높음▲),
+// 세로 중앙에 오는 글자라 배지 안 여백처럼 보이지 않는다(색약에도 형태로 구분).
 const BAND_STYLE: Record<RpnBand, { cls: string; label: string; icon: string }> = {
-  low: { cls: 'bg-green-100 text-green-800', label: '낮음', icon: '▁' },
-  mid: { cls: 'bg-orange-100 text-orange-800', label: '중간', icon: '▄' },
-  high: { cls: 'bg-red-100 text-red-800', label: '높음', icon: '█' },
+  low: { cls: 'bg-green-100 text-green-800', label: '낮음', icon: '▼' },
+  mid: { cls: 'bg-orange-100 text-orange-800', label: '중간', icon: '◆' },
+  high: { cls: 'bg-red-100 text-red-800', label: '높음', icon: '▲' },
 }
+// 배지 공통 크기(세로 중앙 정렬·높이 통일). S/O/D·RPN·AP 모두 같은 metric.
+const PILL = 'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold leading-none'
 // AP 등급 → 한국어·조치수준(사내 규칙). 배지 색(H 적 / M 주황 / L 녹 — RPN 밴드색과 정합).
 const AP_KO: Record<ApLevel, string> = { H: '높음', M: '중간', L: '낮음' }
 const AP_ACTION: Record<ApLevel, string> = { H: '조치 필수', M: '조치 권고', L: '조치 선택' }
@@ -41,48 +44,40 @@ export function SafetyBadge({ s }: { s?: number }) {
 // S/O/D 색 배지(값+라벨 병행). value 없으면 "미기입"(앰버). title로 척도 문구 hover(호출측이 전달).
 export function ScoreChip({ dim, value, title }: { dim: ScaleDim; value?: number; title?: string }) {
   if (value == null)
-    return (
-      <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-        {dim} 미기입
-      </span>
-    )
+    return <span className={`${PILL} bg-amber-100 text-amber-700`}>{dim} 미기입</span>
   return (
-    <span
-      title={title}
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${DIM_STYLE[dim].badge}`}
-    >
+    <span title={title} className={`${PILL} ${DIM_STYLE[dim].badge}`}>
       {dim}={value} · {SOD_FULL[dim]}
     </span>
   )
 }
 
-// RPN 라운드 배지(구간 색+라벨+아이콘 병행). RPN·AP를 같은 급 pill로 통일.
+// RPN 라운드 배지(구간 색+라벨+아이콘 병행). 다른 배지와 같은 크기·높이.
 export function RpnPill({ rpn }: { rpn?: number }) {
   if (rpn == null) return <span className="text-gray-300">—</span>
   const b = BAND_STYLE[rpnBand(rpn)]
   return (
-    <span
-      title={RPN_HINT}
-      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-semibold ${b.cls}`}
-    >
-      <span aria-hidden>{b.icon}</span>
+    <span title={RPN_HINT} className={`${PILL} gap-1 ${b.cls}`}>
+      <span aria-hidden className="text-[10px]">{b.icon}</span>
       {rpn} · {b.label}
     </span>
   )
 }
 
-// AP 라운드 배지: 등급 + 조치수준(사유 라벨은 그 아래 작은 글씨). 라벨은 apTable에서 읽은 값만.
-export function ApPill({ entry, rpn }: { entry?: ApEntry; rpn?: number }) {
+// AP 라운드 배지: 등급 + 조치수준. 사유 라벨은 기본은 배지 아래 작은 글씨,
+// hideLabel=true면 배지만(호출측이 라벨을 별도 줄에 배치해 한 줄 정렬을 지킬 때).
+export function ApPill({ entry, rpn, hideLabel }: { entry?: ApEntry; rpn?: number; hideLabel?: boolean }) {
   if (rpn == null) return <span className="text-gray-300">—</span>
   if (!entry) return <span className="text-amber-600">미설정</span>
+  const pill = (
+    <span title={`${entry.ap} (${AP_KO[entry.ap]}) · ${AP_ACTION[entry.ap]}`} className={`${PILL} ${AP_STYLE[entry.ap]}`}>
+      {entry.ap} ({AP_KO[entry.ap]}) · {AP_ACTION[entry.ap]}
+    </span>
+  )
+  if (hideLabel) return pill
   return (
     <div className="leading-tight">
-      <span
-        title={`${entry.ap} (${AP_KO[entry.ap]}) · ${AP_ACTION[entry.ap]}`}
-        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-semibold ${AP_STYLE[entry.ap]}`}
-      >
-        {entry.ap} ({AP_KO[entry.ap]}) · {AP_ACTION[entry.ap]}
-      </span>
+      {pill}
       {entry.label && <div className="mt-0.5 break-words text-[11px] text-gray-500">{entry.label}</div>}
     </div>
   )

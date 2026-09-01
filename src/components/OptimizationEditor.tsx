@@ -122,10 +122,24 @@ function OptPanel({ fmea, row }: { fmea: Fmea; row: RiskRow }) {
     v == null ? undefined : project.scales[type][dim][v - 1]?.trim() || '기준 미정의'
   const apEntry = row.rpn == null ? undefined : lookupAp(project.apTable, row.s!, row.o!, row.d!)
 
+  // 조치 불필요 → 조치: 판단 자동 해제 후 조치 추가(확인창 없음, 사유 텍스트는 잃음 — 위 안내로 고지).
+  function switchToAction() {
+    if (hasReason) fmea.patchCause(row.fc.id, { noActionReason: undefined })
+    setShowNoAction(false)
+    fmea.addOptimization(row.fc.id)
+  }
+  // 조치 → 조치 불필요: 조치 내용(담당·기한·조치후 S/O/D)이 사라지므로 확인.
+  function switchToNoAction() {
+    if (hasOpts && !window.confirm('이 원인의 조치(담당·기한·조치후 S/O/D 포함)를 모두 삭제하고 "조치 불필요"로 전환합니다. 계속할까요?'))
+      return
+    opts.forEach((o) => fmea.removeOptimization(o.id))
+    setShowNoAction(true)
+  }
+
   return (
     // @container: 아래 폼이 뷰포트가 아니라 이 패널 자체 폭에 반응(좁으면 1열)
     <div className="@container">
-      {/* 전(현재) — Step 5와 동일한 색·배지 재사용(riskBadges) */}
+      {/* 전(현재) — Step 5와 동일한 색·배지 재사용(riskBadges). 한 줄 세로 중앙 정렬, 높이·글자 크기 통일. */}
       <div className="mb-3 rounded-md bg-gray-50 p-2 text-xs">
         <div className="mb-1.5 text-gray-600">
           <span className="font-medium text-gray-700">전(현재)</span> · FC: {row.fc.text}
@@ -141,39 +155,44 @@ function OptPanel({ fmea, row }: { fmea: Fmea; row: RiskRow }) {
           </span>
           <span className="flex items-center gap-1">
             <span className="text-gray-500">AP</span>
-            <ApPill entry={apEntry} rpn={row.rpn} />
+            {/* 사유 라벨은 아래 별도 줄로 빼 한 줄 정렬을 지킨다(hideLabel) */}
+            <ApPill entry={apEntry} rpn={row.rpn} hideLabel />
           </span>
         </div>
+        {apEntry?.label && (
+          <div className="mt-1 break-words text-[11px] text-gray-500">AP 사유: {apEntry.label}</div>
+        )}
       </div>
 
-      {/* 조치 / 조치 불필요 — 상호배타. 미검토 행은 두 버튼만(입력란 없음). */}
+      {/* 조치 / 조치 불필요 — 상호배타(동시 존재 금지). 클릭 시 서로 전환. */}
       <div className="mb-2 flex items-center justify-between gap-2">
         <h3 className="text-sm font-medium text-gray-700">조치 / 판단 (원인 FC 단위)</h3>
         <div className="flex shrink-0 gap-1">
           <button
             type="button"
-            onClick={() => fmea.addOptimization(row.fc.id)}
-            disabled={hasReason}
-            title={hasReason ? '조치 불필요 판단이 있어 비활성 — 먼저 판단을 취소하세요' : undefined}
-            className="rounded-md bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={switchToAction}
+            className="rounded-md bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700"
           >
             + 조치 추가
           </button>
           <button
             type="button"
-            onClick={() => setShowNoAction(true)}
-            disabled={hasOpts}
-            title={hasOpts ? '조치가 있어 비활성 — 조치를 삭제하면 표시할 수 있습니다' : undefined}
-            className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={switchToNoAction}
+            className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
           >
             + 조치 불필요
           </button>
         </div>
       </div>
 
+      {/* 전환 안내: 판단이 있을 때 "+ 조치 추가"를 누르면 판단이 해제됨을 고지(확인창 대신) */}
+      {hasReason && (
+        <p className="mb-2 text-[11px] text-amber-600">“+ 조치 추가”를 누르면 조치 불필요 판단이 해제되고 사유 텍스트는 사라집니다.</p>
+      )}
+
       {/* 조치 불필요 editor — 버튼을 눌렀거나 이미 판단이 있을 때만 표시 */}
       {(showNoAction || hasReason) && (
-        <NoActionSection fmea={fmea} fc={row.fc} hasOpts={hasOpts} onClose={() => setShowNoAction(false)} />
+        <NoActionSection fmea={fmea} fc={row.fc} onClose={() => setShowNoAction(false)} />
       )}
 
       {/* 예방/검출 조치 · 조치후 S/O/D 도움말 범례 */}
@@ -280,7 +299,7 @@ function OptPanel({ fmea, row }: { fmea: Fmea; row: RiskRow }) {
 
 // "조치 불필요" 판단 섹션: 프리셋 드롭다운으로 사유를 채우고(선택 시에만) 자유 수정.
 // 사유 없음 = 미검토(빈칸). 프리셋 목록은 프로젝트 저장 데이터(추가/삭제 가능).
-function NoActionSection({ fmea, fc, hasOpts, onClose }: { fmea: Fmea; fc: RiskRow['fc']; hasOpts: boolean; onClose: () => void }) {
+function NoActionSection({ fmea, fc, onClose }: { fmea: Fmea; fc: RiskRow['fc']; onClose: () => void }) {
   const { project } = fmea
   const reason = fc.noActionReason?.trim() ?? ''
   const [newPreset, setNewPreset] = useState('')
@@ -295,7 +314,12 @@ function NoActionSection({ fmea, fc, hasOpts, onClose }: { fmea: Fmea; fc: RiskR
     <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 p-2">
       <div className="mb-1 flex items-center justify-between">
         <span className="text-xs font-semibold text-slate-600">조치 불필요 판단</span>
-        <button type="button" onClick={cancel} className="text-xs text-slate-500 hover:underline">
+        {/* 미검토 복귀를 눈에 띄는 버튼으로(막다른 골목 방지) */}
+        <button
+          type="button"
+          onClick={cancel}
+          className="rounded-md border border-slate-300 bg-white px-2 py-0.5 text-xs font-medium text-slate-600 hover:bg-slate-100"
+        >
           {reason ? '판단 취소(미검토)' : '닫기'}
         </button>
       </div>
@@ -327,9 +351,6 @@ function NoActionSection({ fmea, fc, hasOpts, onClose }: { fmea: Fmea; fc: RiskR
           </option>
         ))}
       </select>
-      {hasOpts && reason && (
-        <p className="mt-1 text-[11px] text-amber-600">※ 조치가 있어 Excel엔 조치 내용이 출력됩니다(불필요 사유는 화면 참고용).</p>
-      )}
       <details className="mt-1.5">
         <summary className="cursor-pointer text-[11px] text-slate-500">사유 프리셋 관리</summary>
         <div className="mt-1 flex gap-1">
