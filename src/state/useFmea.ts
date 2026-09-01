@@ -31,6 +31,8 @@ type ScaleDim = 'S' | 'O' | 'D'
 export function useFmea() {
   const [project, setProject] = useState<FmeaProject>(loadProject)
   const [currentStep, setCurrentStep] = useState<number>(() => loadUi().currentStep)
+  // Step 6 → Step 5 "수정" 이동 시 강조할 리스크 행 키(세션 UI, 저장 안 함).
+  const [focusRow, setFocusRow] = useState<string | null>(null)
 
   // 도메인 데이터 자동 저장
   useEffect(() => {
@@ -433,5 +435,7 @@ export function useFmea() {
     goTo,
     importProject,
     newProject,
+    focusRow,
+    setFocusRow,
   }
 }

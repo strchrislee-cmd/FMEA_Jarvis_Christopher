@@ -131,6 +131,11 @@ DFMEA/PFMEA를 AIAG-VDA 7단계로 안내하고, 각 단계에서 예시를 보�
 - 줌/팬/드릴/캔버스크기 상태 저장(전부 세션 UI).
 - P-Diagram/인터페이스의 Excel·이미지 삽입(커뮤니티 SheetJS는 이미지 미지원).
 
+## Step 6에서 Step 5 리스크 상세 조회
+- **요약에 현재 관리 텍스트(읽기 전용)**: 전(현재) 요약 하단에 예방관리(O색)·검출관리(D색) 표시. 비면 **"관리 없음"**(앰버) 명시 — 빈칸 금지(관리 부재가 조치 불필요 판단 근거). 데이터 무변경.
+- **리스크 행 더블클릭 → Step 5 카드 모달(읽기 전용)**: `RiskCard`에 **`readOnly` 분기 추가**(입력 RatingSelect/CellInput/PdImport 대신 텍스트·배지) 후 `export`해 **Step 5·6이 동일 컴포넌트 재사용**(새로 만들지 않음). 모달=구조·FM·FE·S·FC·예방관리·O·검출관리·D·RPN·AP, 색·배지·척도문구 Step 5와 동일. ESC·바깥클릭·✕로 닫힘, 내부 세로 스크롤. 단일클릭=선택 유지, 더블클릭=모달.
+- **"Step 5에서 수정" 링크**: 편집은 한 화면에서만(혼동 방지) — 모달은 조회까지. 링크는 `useFmea.setFocusRow(key)`(세션 UI, 미저장) + `goTo(4)`. RiskEditor는 `focusRow`면 카드 보기로 전환→해당 카드(`id=riskcard-{key}`)로 스크롤+`ring` 강조 후 ~2.6s 뒤 자동 해제.
+
 ## Step 6 우측 패널 개선(색·AP 라벨·버튼화)
 - **리스크 표시 원자 단일 출처 `components/riskBadges.tsx`** — `SafetyBadge/RpnPill/ApPill/ScoreChip` + 색맵(`DIM_STYLE/BAND_STYLE/AP_STYLE/AP_KO/AP_ACTION`)을 Step 5(`RiskEditor`)에서 추출해 이관. RiskEditor·OptimizationEditor 둘 다 여기서 import(중복 정의 금지 → 두 화면 색·배지 항상 일치). `RiskEditor.ScoreLine`도 `ScoreChip` 재사용. **ApPill은 등급 한글 병기 포함**(`M (중간) · 조치 권고`) — Step 5 표/카드에도 동일 반영.
 - **전(현재) 요약 색 적용**: 단색 텍스트 → `ScoreChip`(S 적/O 주황/D 보라, hover=`project.scales` 척도문구=Step5 동일 소스) + `RpnPill`(구간색·아이콘) + `ApPill`(등급+조치수준+apTable 사유 라벨) + 안전행 `SafetyBadge`. 색+수치·라벨 병행.

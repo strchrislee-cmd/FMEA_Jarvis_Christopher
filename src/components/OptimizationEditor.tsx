@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { OptStatus } from '../types/fmea'
 import type { useFmea } from '../state/useFmea'
 import { buildRiskRows, isSafetyRow, lookupAp, RATINGS, type RiskRow } from '../lib/risk'
@@ -6,7 +6,10 @@ import { nodeContextLabel } from '../lib/structure'
 import { OPT_STATUS_LABELS, postAP, postRPN } from '../lib/optimization'
 import { helpFor, type FieldKey } from '../lib/help'
 import FieldHelp from './FieldHelp'
-import { ApPill, RpnPill, SafetyBadge, ScoreChip } from './riskBadges'
+import { ApPill, DIM_STYLE, RpnPill, SafetyBadge, ScoreChip } from './riskBadges'
+import { RiskCard } from './RiskEditor'
+
+const rowKeyOf = (r: RiskRow) => `${r.fe.id}-${r.fm.id}-${r.fc.id}`
 
 type Fmea = ReturnType<typeof useFmea>
 const STATUSES: OptStatus[] = ['open', 'in_progress', 'done']
@@ -16,7 +19,9 @@ export default function OptimizationEditor({ fmea }: { fmea: Fmea }) {
   const { project } = fmea
   const rows = buildRiskRows(project)
   const [rowKey, setRowKey] = useState<string | null>(null)
-  const selected = rows.find((r) => `${r.fe.id}-${r.fm.id}-${r.fc.id}` === rowKey) ?? null
+  const [modalKey, setModalKey] = useState<string | null>(null) // Step 5 상세 모달 대상(세션 UI)
+  const selected = rows.find((r) => rowKeyOf(r) === rowKey) ?? null
+  const modalRow = rows.find((r) => rowKeyOf(r) === modalKey) ?? null
 
   if (rows.length === 0) {
     return <p className="text-sm text-gray-400">Step 4~5에서 리스크 행을 먼저 구성하세요.</p>
@@ -44,6 +49,8 @@ export default function OptimizationEditor({ fmea }: { fmea: Fmea }) {
                 <button
                   type="button"
                   onClick={() => setRowKey(key)}
+                  onDoubleClick={() => setModalKey(key)}
+                  title="더블클릭: Step 5 리스크 상세 보기"
                   className={`flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left ${
                     active ? 'bg-blue-600 text-white' : 'hover:bg-gray-100'
                   }`}
@@ -99,10 +106,91 @@ export default function OptimizationEditor({ fmea }: { fmea: Fmea }) {
       {/* 우: 선택 행의 FC 조치 편집 */}
       <div className="rounded-lg border border-gray-200 p-3">
         {!selected ? (
-          <p className="text-sm text-gray-400">왼쪽에서 리스크 행을 선택하세요.</p>
+          <p className="text-sm text-gray-400">왼쪽에서 리스크 행을 선택하세요. (행 더블클릭 = Step 5 상세)</p>
         ) : (
           <OptPanel key={rowKey} fmea={fmea} row={selected} />
         )}
+      </div>
+
+      {/* Step 5 리스크 상세 모달(읽기 전용) — 더블클릭으로 열림 */}
+      {modalRow && (
+        <RiskDetailModal
+          fmea={fmea}
+          row={modalRow}
+          onClose={() => setModalKey(null)}
+          onEdit={() => {
+            fmea.setFocusRow(rowKeyOf(modalRow))
+            fmea.goTo(4)
+            setModalKey(null)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+// Step 5 카드(읽기 전용)를 모달로 보여준다. RiskCard 재사용(readOnly). ESC·바깥클릭·닫기 버튼으로 닫힘.
+function RiskDetailModal({
+  fmea,
+  row,
+  onClose,
+  onEdit,
+}: {
+  fmea: Fmea
+  row: RiskRow
+  onClose: () => void
+  onEdit: () => void
+}) {
+  const { project } = fmea
+  const type = project.meta.type
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [onClose])
+
+  const scaleText = (dim: 'S' | 'O' | 'D', v?: number) =>
+    v == null ? '' : project.scales[type][dim][v - 1]?.trim() || '기준 미정의'
+  const nodeId = project.functions.find((f) => f.id === row.fm.functionId)?.structureNodeId
+  const nodeLabel = nodeId ? nodeContextLabel(project.structure, nodeId, type) : ''
+  const apEntry = row.rpn == null ? undefined : lookupAp(project.apTable, row.s!, row.o!, row.d!)
+
+  return (
+    // 바깥 클릭으로 닫힘(내부 클릭은 stopPropagation). 세로 스크롤은 모달 내부에서.
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-lg bg-white shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-2">
+          <h3 className="text-sm font-semibold text-gray-800">리스크 상세 (Step 5) · 읽기 전용</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="닫기"
+            className="rounded px-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="overflow-y-auto p-4">
+          <RiskCard
+            readOnly
+            fmea={fmea}
+            r={row}
+            safety={isSafetyRow(row.s)}
+            nodeLabel={nodeLabel}
+            controls={[]}
+            apEntry={apEntry}
+            scaleText={scaleText}
+            onScaleToast={() => {}}
+          />
+        </div>
+        <div className="border-t border-gray-200 px-4 py-2 text-right">
+          <button type="button" onClick={onEdit} className="text-xs font-medium text-blue-600 hover:underline">
+            Step 5에서 수정 →
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -162,6 +250,25 @@ function OptPanel({ fmea, row }: { fmea: Fmea; row: RiskRow }) {
         {apEntry?.label && (
           <div className="mt-1 break-words text-[11px] text-gray-500">AP 사유: {apEntry.label}</div>
         )}
+        {/* 현재 관리 텍스트(읽기 전용) — 조치 불필요 판단 근거. 비면 "관리 없음" 명시. 색은 Step 5 연결(예방=O/검출=D). */}
+        <div className="mt-2 space-y-0.5 border-t border-gray-200 pt-1.5">
+          <div className="break-words text-[11px]">
+            <span className={`font-semibold ${DIM_STYLE.O.text}`}>예방관리</span>{' '}
+            {row.fc.prevention?.trim() ? (
+              <span className="text-gray-700">{row.fc.prevention}</span>
+            ) : (
+              <span className="text-amber-600">관리 없음</span>
+            )}
+          </div>
+          <div className="break-words text-[11px]">
+            <span className={`font-semibold ${DIM_STYLE.D.text}`}>검출관리</span>{' '}
+            {row.fc.detectionControl?.trim() ? (
+              <span className="text-gray-700">{row.fc.detectionControl}</span>
+            ) : (
+              <span className="text-amber-600">관리 없음</span>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* 조치 / 조치 불필요 — 상호배타(동시 존재 금지). 클릭 시 서로 전환. */}

@@ -1,4 +1,4 @@
-import { Fragment, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import type { ApEntry, ApLevel, FmeaType } from '../types/fmea'
 import type { useFmea } from '../state/useFmea'
 import { buildRiskRows, isSafetyRow, lookupAp, RATINGS, type RiskRow } from '../lib/risk'
@@ -45,6 +45,22 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
   const apEmpty = Object.keys(project.apTable).length === 0
   // 표/카드 보기 전환(세션 UI, 저장 안 함). 기본=카드(표는 비교용으로 유지).
   const [view, setView] = useState<'table' | 'card'>('card')
+
+  // Step 6 상세 모달의 "Step 5에서 수정"으로 넘어온 경우: 카드 보기로 전환해 해당 행으로 스크롤·강조 후 자동 해제.
+  const focusRow = fmea.focusRow
+  useEffect(() => {
+    if (!focusRow) return
+    setView('card')
+    const t1 = setTimeout(() => {
+      document.getElementById(`riskcard-${focusRow}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 60)
+    const t2 = setTimeout(() => fmea.setFocusRow(null), 2600)
+    return () => {
+      clearTimeout(t1)
+      clearTimeout(t2)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusRow])
   // 척도 문구 조회(scales에서만; 값 없으면 빈 문자열, 문구 없으면 "기준 미정의").
   const scaleText = (dim: ScaleDim, value?: number) =>
     value == null ? '' : project.scales[project.meta.type][dim][value - 1]?.trim() || '기준 미정의'
@@ -94,19 +110,24 @@ export default function RiskEditor({ fmea }: { fmea: Fmea }) {
         ) : view === 'card' ? (
           // 카드 보기: 레코드 1건을 세로로 전개(전문 표시). 세션 UI 전환, 계산·모델 불변.
           <div className="space-y-3">
-            {rows.map((r) => (
-              <RiskCard
-                key={`${r.fe.id}-${r.fm.id}-${r.fc.id}`}
-                fmea={fmea}
-                r={r}
-                safety={isSafetyRow(r.s)}
-                nodeLabel={nodeLabelForFm(project, r.fm.functionId)}
-                controls={controlsForFm(project, r.fm.functionId)}
-                apEntry={r.rpn == null ? undefined : lookupAp(project.apTable, r.s!, r.o!, r.d!)}
-                scaleText={scaleText}
-                onScaleToast={showScaleToast}
-              />
-            ))}
+            {rows.map((r) => {
+              const key = `${r.fe.id}-${r.fm.id}-${r.fc.id}`
+              return (
+                <RiskCard
+                  key={key}
+                  domId={`riskcard-${key}`}
+                  highlight={fmea.focusRow === key}
+                  fmea={fmea}
+                  r={r}
+                  safety={isSafetyRow(r.s)}
+                  nodeLabel={nodeLabelForFm(project, r.fm.functionId)}
+                  controls={controlsForFm(project, r.fm.functionId)}
+                  apEntry={r.rpn == null ? undefined : lookupAp(project.apTable, r.s!, r.o!, r.d!)}
+                  scaleText={scaleText}
+                  onScaleToast={showScaleToast}
+                />
+              )
+            })}
           </div>
         ) : (
           // 가로 스크롤 없이 화면 안에서 해결: table-fixed + colgroup 폭 배분.
@@ -336,7 +357,8 @@ function ScoreLine({
 }
 
 // 카드 1건: 레코드를 세로로 전개(전문·말줄임 없음). 계산·모델 불변, 표시 전용.
-function RiskCard({
+// readOnly=true면 입력(RatingSelect/CellInput/PdImport) 대신 텍스트·배지만 렌더(Step 6 상세 모달에서 재사용).
+export function RiskCard({
   fmea,
   r,
   safety,
@@ -345,6 +367,9 @@ function RiskCard({
   apEntry,
   scaleText,
   onScaleToast,
+  readOnly,
+  highlight,
+  domId,
 }: {
   fmea: Fmea
   r: RiskRow
@@ -354,10 +379,20 @@ function RiskCard({
   apEntry?: ApEntry
   scaleText: (dim: ScaleDim, value?: number) => string
   onScaleToast: (dim: ScaleDim, value: number) => void
+  readOnly?: boolean
+  highlight?: boolean
+  domId?: string
 }) {
   const tint = safety ? 'border-rose-300 bg-rose-50/40' : 'border-gray-200 bg-white'
+  // 읽기전용 점수 줄: RatingSelect 없이 색 배지 + 척도문구만(편집형 ScoreLine과 시각 동일).
+  const readScore = (dim: ScaleDim, value?: number) => (
+    <div className="mt-1.5 flex flex-wrap items-center gap-2">
+      <ScoreChip dim={dim} value={value} title={scaleText(dim, value)} />
+      {value != null && <span className={`text-xs ${DIM_STYLE[dim].text}`}>{scaleText(dim, value)}</span>}
+    </div>
+  )
   return (
-    <div className={`rounded-lg border p-4 ${tint}`}>
+    <div id={domId} className={`rounded-lg border p-4 ${tint} ${highlight ? 'ring-2 ring-blue-400' : ''}`}>
       {/* 헤더: 구조 경로 · FM(안전 배지) · 완성도 */}
       <div className="flex flex-wrap items-start justify-between gap-2 border-b border-gray-200 pb-2">
         <div className="min-w-0">
@@ -375,16 +410,20 @@ function RiskCard({
         <div className={`rounded-md border-l-4 pl-3 ${DIM_STYLE.S.border}`}>
           <div className="text-xs font-medium text-gray-500">영향 FE</div>
           <div className="break-words text-sm text-gray-800">{r.fe.text || '—'}</div>
-          <ScoreLine dim="S" value={r.s} scaleText={scaleText('S', r.s)}>
-            <RatingSelect
-              className="w-20"
-              value={r.s}
-              onChange={(v) => {
-                fmea.setEffectSeverity(r.fe.id, v)
-                if (v) onScaleToast('S', v)
-              }}
-            />
-          </ScoreLine>
+          {readOnly ? (
+            readScore('S', r.s)
+          ) : (
+            <ScoreLine dim="S" value={r.s} scaleText={scaleText('S', r.s)}>
+              <RatingSelect
+                className="w-20"
+                value={r.s}
+                onChange={(v) => {
+                  fmea.setEffectSeverity(r.fe.id, v)
+                  if (v) onScaleToast('S', v)
+                }}
+              />
+            </ScoreLine>
+          )}
         </div>
 
         {/* 원인 FC (점수 없음) */}
@@ -397,60 +436,82 @@ function RiskCard({
         <div className={`rounded-md border-l-4 pl-3 ${DIM_STYLE.O.border}`}>
           <div className="flex flex-wrap items-center gap-2">
             <span className={`text-xs font-semibold ${DIM_STYLE.O.text}`}>예방관리</span>
-            <FieldHelp k="prevention" />
-            <PdImportSelect
-              label="◇ Control Factor에서 가져오기"
-              items={controls}
-              onPick={(it) => fmea.patchCause(r.fc.id, { prevention: it.text, preventionControlId: it.id })}
-            />
+            {!readOnly && <FieldHelp k="prevention" />}
+            {!readOnly && (
+              <PdImportSelect
+                label="◇ Control Factor에서 가져오기"
+                items={controls}
+                onPick={(it) => fmea.patchCause(r.fc.id, { prevention: it.text, preventionControlId: it.id })}
+              />
+            )}
             {r.fc.preventionControlId && (
               <span title="P-Diagram Control Factor에서 가져옴" className="text-xs text-amber-600">
                 ◇
               </span>
             )}
           </div>
-          <div className="mt-1">
-            <CellInput
-              value={r.fc.prevention ?? ''}
-              onChange={(v) => fmea.patchCause(r.fc.id, { prevention: v })}
-              placeholder={helpFor('prevention').placeholder}
-            />
-          </div>
-          <ScoreLine dim="O" value={r.o} scaleText={scaleText('O', r.o)}>
-            <RatingSelect
-              className="w-20"
-              value={r.o}
-              onChange={(v) => {
-                fmea.patchCause(r.fc.id, { occurrence: v })
-                if (v) onScaleToast('O', v)
-              }}
-            />
-          </ScoreLine>
+          {readOnly ? (
+            <div className="mt-1 break-words text-sm text-gray-800">
+              {r.fc.prevention?.trim() || <span className="text-amber-600">관리 없음</span>}
+            </div>
+          ) : (
+            <div className="mt-1">
+              <CellInput
+                value={r.fc.prevention ?? ''}
+                onChange={(v) => fmea.patchCause(r.fc.id, { prevention: v })}
+                placeholder={helpFor('prevention').placeholder}
+              />
+            </div>
+          )}
+          {readOnly ? (
+            readScore('O', r.o)
+          ) : (
+            <ScoreLine dim="O" value={r.o} scaleText={scaleText('O', r.o)}>
+              <RatingSelect
+                className="w-20"
+                value={r.o}
+                onChange={(v) => {
+                  fmea.patchCause(r.fc.id, { occurrence: v })
+                  if (v) onScaleToast('O', v)
+                }}
+              />
+            </ScoreLine>
+          )}
         </div>
 
         {/* 검출관리 입력 → D(검출도, 보라) — 라벨·점수 같은 색으로 대응 */}
         <div className={`rounded-md border-l-4 pl-3 ${DIM_STYLE.D.border}`}>
           <div className="flex flex-wrap items-center gap-2">
             <span className={`text-xs font-semibold ${DIM_STYLE.D.text}`}>검출관리</span>
-            <FieldHelp k="detectionControl" />
+            {!readOnly && <FieldHelp k="detectionControl" />}
           </div>
-          <div className="mt-1">
-            <CellInput
-              value={r.fc.detectionControl ?? ''}
-              onChange={(v) => fmea.patchCause(r.fc.id, { detectionControl: v })}
-              placeholder={helpFor('detectionControl').placeholder}
-            />
-          </div>
-          <ScoreLine dim="D" value={r.d} scaleText={scaleText('D', r.d)}>
-            <RatingSelect
-              className="w-20"
-              value={r.d}
-              onChange={(v) => {
-                fmea.patchCause(r.fc.id, { detection: v })
-                if (v) onScaleToast('D', v)
-              }}
-            />
-          </ScoreLine>
+          {readOnly ? (
+            <div className="mt-1 break-words text-sm text-gray-800">
+              {r.fc.detectionControl?.trim() || <span className="text-amber-600">관리 없음</span>}
+            </div>
+          ) : (
+            <div className="mt-1">
+              <CellInput
+                value={r.fc.detectionControl ?? ''}
+                onChange={(v) => fmea.patchCause(r.fc.id, { detectionControl: v })}
+                placeholder={helpFor('detectionControl').placeholder}
+              />
+            </div>
+          )}
+          {readOnly ? (
+            readScore('D', r.d)
+          ) : (
+            <ScoreLine dim="D" value={r.d} scaleText={scaleText('D', r.d)}>
+              <RatingSelect
+                className="w-20"
+                value={r.d}
+                onChange={(v) => {
+                  fmea.patchCause(r.fc.id, { detection: v })
+                  if (v) onScaleToast('D', v)
+                }}
+              />
+            </ScoreLine>
+          )}
         </div>
       </div>
 
