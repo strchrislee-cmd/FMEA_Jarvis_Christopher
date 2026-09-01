@@ -131,6 +131,11 @@ DFMEA/PFMEA를 AIAG-VDA 7단계로 안내하고, 각 단계에서 예시를 보�
 - 줌/팬/드릴/캔버스크기 상태 저장(전부 세션 UI).
 - P-Diagram/인터페이스의 Excel·이미지 삽입(커뮤니티 SheetJS는 이미지 미지원).
 
+## Step 6 우측 패널 개선(색·AP 라벨·버튼화)
+- **리스크 표시 원자 단일 출처 `components/riskBadges.tsx`** — `SafetyBadge/RpnPill/ApPill/ScoreChip` + 색맵(`DIM_STYLE/BAND_STYLE/AP_STYLE/AP_KO/AP_ACTION`)을 Step 5(`RiskEditor`)에서 추출해 이관. RiskEditor·OptimizationEditor 둘 다 여기서 import(중복 정의 금지 → 두 화면 색·배지 항상 일치). `RiskEditor.ScoreLine`도 `ScoreChip` 재사용. **ApPill은 등급 한글 병기 포함**(`M (중간) · 조치 권고`) — Step 5 표/카드에도 동일 반영.
+- **전(현재) 요약 색 적용**: 단색 텍스트 → `ScoreChip`(S 적/O 주황/D 보라, hover=`project.scales` 척도문구=Step5 동일 소스) + `RpnPill`(구간색·아이콘) + `ApPill`(등급+조치수준+apTable 사유 라벨) + 안전행 `SafetyBadge`. 색+수치·라벨 병행.
+- **조치 불필요 버튼화**: 상시 표시 제거 → "+ 조치 추가"·"+ 조치 불필요" 나란히. 미검토 행은 버튼만(입력란 없음), "+ 조치 불필요" 클릭 시에만 프리셋 editor 표시(이미 판단 있으면 자동). **상호배타**: 조치 있으면 불필요 버튼 disabled, 판단 있으면 조치추가 disabled. "판단 취소(미검토)"로 해제+접기. `OptPanel`은 `key={rowKey}`로 행 전환 시 열림상태 초기화. 데이터·계산 불변.
+
 ## Step 6 "조치 불필요" 사유 프리셋
 - **모델 = `FailureCause.noActionReason?`(optional)** — optimizations 아님. 근거: O/D·현재관리와 같은 FC 귀속이라 정합, optimizations에 넣으면 `hasAction`·`postRPN`·`mergeOptimizations` 오작동. optional·가산이라 계산·정규화 무파급('조치'와 '조치 안 함 판단'을 자료구조로 분리).
 - **프리셋 = `project.noActionPresets: string[]`**(편집 데이터, 하드코딩 상수 아님). 기본 6종 seed는 `lib/optimization.ts` `DEFAULT_NO_ACTION_PRESETS`, factory가 프로젝트에 복사·`normalizeProject`가 구버전 누락 시 주입(명시적 빈 배열은 존중). `useFmea.addNoActionPreset/removeNoActionPreset`, UI에서 추가·삭제.

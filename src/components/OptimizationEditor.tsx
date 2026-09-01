@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import type { OptStatus } from '../types/fmea'
 import type { useFmea } from '../state/useFmea'
-import { buildRiskRows, RATINGS, type RiskRow } from '../lib/risk'
+import { buildRiskRows, isSafetyRow, lookupAp, RATINGS, type RiskRow } from '../lib/risk'
 import { nodeContextLabel } from '../lib/structure'
 import { OPT_STATUS_LABELS, postAP, postRPN } from '../lib/optimization'
 import { helpFor, type FieldKey } from '../lib/help'
 import FieldHelp from './FieldHelp'
+import { ApPill, RpnPill, SafetyBadge, ScoreChip } from './riskBadges'
 
 type Fmea = ReturnType<typeof useFmea>
 const STATUSES: OptStatus[] = ['open', 'in_progress', 'done']
@@ -100,7 +101,7 @@ export default function OptimizationEditor({ fmea }: { fmea: Fmea }) {
         {!selected ? (
           <p className="text-sm text-gray-400">왼쪽에서 리스크 행을 선택하세요.</p>
         ) : (
-          <OptPanel fmea={fmea} row={selected} />
+          <OptPanel key={rowKey} fmea={fmea} row={selected} />
         )}
       </div>
     </div>
@@ -110,31 +111,70 @@ export default function OptimizationEditor({ fmea }: { fmea: Fmea }) {
 function OptPanel({ fmea, row }: { fmea: Fmea; row: RiskRow }) {
   const { project } = fmea
   const opts = project.optimizations.filter((o) => o.failureCauseId === row.fc.id)
+  const hasOpts = opts.length > 0
+  const hasReason = !!row.fc.noActionReason?.trim()
+  // 조치 불필요 editor 펼침(세션 UI). 이미 판단이 있으면 자동 표시(OptPanel은 rowKey로 keyed → 행마다 초기화).
+  const [showNoAction, setShowNoAction] = useState(hasReason)
+
+  // 척도 문구(hover) — Step 5와 동일 소스(project.scales). AP 사유 라벨은 apTable에서.
+  const type = project.meta.type
+  const scaleText = (dim: 'S' | 'O' | 'D', v?: number) =>
+    v == null ? undefined : project.scales[type][dim][v - 1]?.trim() || '기준 미정의'
+  const apEntry = row.rpn == null ? undefined : lookupAp(project.apTable, row.s!, row.o!, row.d!)
 
   return (
     // @container: 아래 폼이 뷰포트가 아니라 이 패널 자체 폭에 반응(좁으면 1열)
     <div className="@container">
-      {/* 전(현재) */}
-      <div className="mb-3 rounded-md bg-gray-50 p-2 text-xs text-gray-600">
-        <span className="font-medium text-gray-700">전(현재)</span> · FC: {row.fc.text} ·
-        S {row.s ?? '—'} / O {row.o ?? '—'} / D {row.d ?? '—'} ·{' '}
-        <span className="font-medium">RPN {row.rpn ?? '—'}</span> · AP{' '}
-        {row.rpn == null ? '—' : (row.ap ?? '미설정')}
+      {/* 전(현재) — Step 5와 동일한 색·배지 재사용(riskBadges) */}
+      <div className="mb-3 rounded-md bg-gray-50 p-2 text-xs">
+        <div className="mb-1.5 text-gray-600">
+          <span className="font-medium text-gray-700">전(현재)</span> · FC: {row.fc.text}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          {isSafetyRow(row.s) && <SafetyBadge s={row.s} />}
+          <ScoreChip dim="S" value={row.s} title={scaleText('S', row.s)} />
+          <ScoreChip dim="O" value={row.o} title={scaleText('O', row.o)} />
+          <ScoreChip dim="D" value={row.d} title={scaleText('D', row.d)} />
+          <span className="flex items-center gap-1">
+            <span className="text-gray-500">RPN</span>
+            <RpnPill rpn={row.rpn} />
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="text-gray-500">AP</span>
+            <ApPill entry={apEntry} rpn={row.rpn} />
+          </span>
+        </div>
       </div>
 
-      {/* 조치 불필요 판단(FC 단위). 조치 레코드와 별개 — 미검토(빈칸)와 구분. */}
-      <NoActionSection fmea={fmea} fc={row.fc} hasOpts={opts.length > 0} />
-
-      <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-sm font-medium text-gray-700">조치 (원인 FC 단위)</h3>
-        <button
-          type="button"
-          onClick={() => fmea.addOptimization(row.fc.id)}
-          className="rounded-md bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700"
-        >
-          + 조치 추가
-        </button>
+      {/* 조치 / 조치 불필요 — 상호배타. 미검토 행은 두 버튼만(입력란 없음). */}
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h3 className="text-sm font-medium text-gray-700">조치 / 판단 (원인 FC 단위)</h3>
+        <div className="flex shrink-0 gap-1">
+          <button
+            type="button"
+            onClick={() => fmea.addOptimization(row.fc.id)}
+            disabled={hasReason}
+            title={hasReason ? '조치 불필요 판단이 있어 비활성 — 먼저 판단을 취소하세요' : undefined}
+            className="rounded-md bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            + 조치 추가
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowNoAction(true)}
+            disabled={hasOpts}
+            title={hasOpts ? '조치가 있어 비활성 — 조치를 삭제하면 표시할 수 있습니다' : undefined}
+            className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            + 조치 불필요
+          </button>
+        </div>
       </div>
+
+      {/* 조치 불필요 editor — 버튼을 눌렀거나 이미 판단이 있을 때만 표시 */}
+      {(showNoAction || hasReason) && (
+        <NoActionSection fmea={fmea} fc={row.fc} hasOpts={hasOpts} onClose={() => setShowNoAction(false)} />
+      )}
 
       {/* 예방/검출 조치 · 조치후 S/O/D 도움말 범례 */}
       <div className="mb-3 space-y-1.5 rounded-md bg-gray-50 p-2">
@@ -240,21 +280,24 @@ function OptPanel({ fmea, row }: { fmea: Fmea; row: RiskRow }) {
 
 // "조치 불필요" 판단 섹션: 프리셋 드롭다운으로 사유를 채우고(선택 시에만) 자유 수정.
 // 사유 없음 = 미검토(빈칸). 프리셋 목록은 프로젝트 저장 데이터(추가/삭제 가능).
-function NoActionSection({ fmea, fc, hasOpts }: { fmea: Fmea; fc: RiskRow['fc']; hasOpts: boolean }) {
+function NoActionSection({ fmea, fc, hasOpts, onClose }: { fmea: Fmea; fc: RiskRow['fc']; hasOpts: boolean; onClose: () => void }) {
   const { project } = fmea
   const reason = fc.noActionReason?.trim() ?? ''
   const [newPreset, setNewPreset] = useState('')
   const set = (v: string | undefined) => fmea.patchCause(fc.id, { noActionReason: v })
+  // 판단 취소 = 사유 제거(미검토로) + editor 접기.
+  const cancel = () => {
+    set(undefined)
+    onClose()
+  }
 
   return (
     <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 p-2">
       <div className="mb-1 flex items-center justify-between">
         <span className="text-xs font-semibold text-slate-600">조치 불필요 판단</span>
-        {reason && (
-          <button type="button" onClick={() => set(undefined)} className="text-xs text-slate-500 hover:underline">
-            판단 취소(미검토)
-          </button>
-        )}
+        <button type="button" onClick={cancel} className="text-xs text-slate-500 hover:underline">
+          {reason ? '판단 취소(미검토)' : '닫기'}
+        </button>
       </div>
       {reason ? (
         <textarea

@@ -1,17 +1,17 @@
 import { Fragment, useRef, useState } from 'react'
 import type { ApEntry, ApLevel, FmeaType } from '../types/fmea'
 import type { useFmea } from '../state/useFmea'
-import { buildRiskRows, isSafetyRow, lookupAp, RATINGS, rpnBand, type RiskRow, type RpnBand } from '../lib/risk'
+import { buildRiskRows, isSafetyRow, lookupAp, RATINGS, type RiskRow } from '../lib/risk'
 import { getPDiagram } from '../lib/pdiagram'
 import { nodeContextLabel } from '../lib/structure'
 import { companyApPreset } from '../lib/apPreset'
-import { helpFor, RPN_HINT, SOD_FULL, SOD_LABELS, type FieldKey } from '../lib/help'
+import { helpFor, RPN_HINT, SOD_LABELS, type FieldKey } from '../lib/help'
 import { dfmeaScalePreset, DFMEA_SCALE_NOTE } from '../lib/scalePreset'
 import FieldHelp from './FieldHelp'
 import PdImportSelect from './PdImportSelect'
+import { ApPill, DIM_STYLE, RpnPill, SafetyBadge, ScoreChip, type ScaleDim } from './riskBadges'
 
 type Fmea = ReturnType<typeof useFmea>
-type ScaleDim = 'S' | 'O' | 'D'
 
 // FM이 속한 구조 노드의 Control Factor 목록(prevention 가져오기용).
 function controlsForFm(project: Fmea['project'], functionId: string) {
@@ -35,29 +35,8 @@ const RISK_HELP: [string, FieldKey][] = [
   ['검출관리', 'detectionControl'],
   ['RPN', 'rpn'],
 ]
-// RPN 구간 → 색상·라벨·아이콘(색상만으로 정보 전달 금지: 값+라벨+아이콘 병행).
-// 아이콘은 막대 높이 은유(위험 클수록 높음) — 색약에도 낮음/중간/높음 구분.
-const BAND_STYLE: Record<RpnBand, { cls: string; label: string; icon: string }> = {
-  low: { cls: 'bg-green-100 text-green-800', label: '낮음', icon: '▁' },
-  mid: { cls: 'bg-orange-100 text-orange-800', label: '중간', icon: '▄' },
-  high: { cls: 'bg-red-100 text-red-800', label: '높음', icon: '█' },
-}
-// AP 등급 → 한국어·조치수준(사내 규칙: H=조치 필수 / M=조치 권고 / L=조치 선택).
-const AP_KO: Record<ApLevel, string> = { H: '높음', M: '중간', L: '낮음' }
-const AP_ACTION: Record<ApLevel, string> = { H: '조치 필수', M: '조치 권고', L: '조치 선택' }
-// AP 배지 색(H 적 / M 주황 / L 녹 — RPN 밴드색과 정합). RPN·AP를 같은 급 pill로.
-const AP_STYLE: Record<ApLevel, string> = {
-  H: 'bg-red-100 text-red-800',
-  M: 'bg-orange-100 text-orange-800',
-  L: 'bg-green-100 text-green-800',
-}
-// S/O/D 색: S 적 / O 주황 / D 보라. 관리-점수 대응을 같은 색으로 묶는다
-// (예방관리↔O 주황, 검출관리↔D 보라). 항상 라벨·수치 병행(색약 대응).
-const DIM_STYLE: Record<ScaleDim, { badge: string; border: string; text: string }> = {
-  S: { badge: 'bg-red-100 text-red-800', border: 'border-red-300', text: 'text-red-700' },
-  O: { badge: 'bg-orange-100 text-orange-800', border: 'border-orange-300', text: 'text-orange-700' },
-  D: { badge: 'bg-violet-100 text-violet-800', border: 'border-violet-300', text: 'text-violet-700' },
-}
+// 색·배지 원자(BAND_STYLE/AP_*/DIM_STYLE·SafetyBadge/RpnPill/ApPill/ScoreChip)는
+// ./riskBadges 단일 출처에서 가져와 Step 6과 공유한다(중복 정의 금지).
 
 // Step 5: Risk Analysis — 파생 리스크 행(S/O/D 되쓰기) + 척도표 + AP 조합표
 export default function RiskEditor({ fmea }: { fmea: Fmea }) {
@@ -316,50 +295,6 @@ function ViewToggle({ view, onChange }: { view: 'table' | 'card'; onChange: (v: 
   )
 }
 
-// 안전/법규 배지(S=9·10). 표·카드 공용.
-function SafetyBadge({ s }: { s?: number }) {
-  return (
-    <span
-      title={`안전/법규 관련(S=${s}) — RPN과 무관하게 우선 검토`}
-      className="mr-1 inline-flex items-center rounded bg-rose-600 px-1 py-0.5 align-middle text-[10px] font-bold text-white"
-    >
-      ⚠ 안전
-    </span>
-  )
-}
-
-// RPN 라운드 배지(구간 색+라벨+아이콘 병행). RPN·AP를 같은 급 pill로 통일.
-function RpnPill({ rpn }: { rpn?: number }) {
-  if (rpn == null) return <span className="text-gray-300">—</span>
-  const b = BAND_STYLE[rpnBand(rpn)]
-  return (
-    <span
-      title={RPN_HINT}
-      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-semibold ${b.cls}`}
-    >
-      <span aria-hidden>{b.icon}</span>
-      {rpn} · {b.label}
-    </span>
-  )
-}
-
-// AP 라운드 배지: 등급 + 조치수준(사유 라벨은 그 아래 작은 글씨). 라벨은 표에서 읽은 값만.
-function ApPill({ entry, rpn }: { entry?: ApEntry; rpn?: number }) {
-  if (rpn == null) return <span className="text-gray-300">—</span>
-  if (!entry) return <span className="text-amber-600">미설정</span>
-  return (
-    <div className="leading-tight">
-      <span
-        title={`${entry.ap} (${AP_KO[entry.ap]}) · ${AP_ACTION[entry.ap]}`}
-        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-semibold ${AP_STYLE[entry.ap]}`}
-      >
-        {entry.ap} · {AP_ACTION[entry.ap]}
-      </span>
-      {entry.label && <div className="mt-0.5 break-words text-[11px] text-gray-500">{entry.label}</div>}
-    </div>
-  )
-}
-
 // 카드 헤더 완성도: S/O/D 기입 수(미기입 있으면 주황으로 눈에 띄게).
 function Completeness({ s, o, d }: { s?: number; o?: number; d?: number }) {
   const filled = [s, o, d].filter((v) => v != null).length
@@ -394,15 +329,7 @@ function ScoreLine({
       <span aria-hidden className="text-gray-400">
         →
       </span>
-      {value == null ? (
-        <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-          {dim} 미기입
-        </span>
-      ) : (
-        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${st.badge}`}>
-          {dim}={value} · {SOD_FULL[dim]}
-        </span>
-      )}
+      <ScoreChip dim={dim} value={value} />
       {value != null && <span className={`text-xs ${st.text}`}>{scaleText}</span>}
     </div>
   )
